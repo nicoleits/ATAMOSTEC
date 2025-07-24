@@ -4,12 +4,13 @@ Dashboard interactivo para visualizar las curvas IV (Intensidad-Voltaje) de los 
 
 ## 📋 Características
 
-- **Selección de módulo**: perc1fixed o perc2fixed
+- **Selección múltiple de módulos**: perc1fixed y perc2fixed
 - **Selección de fecha**: Visualizar curvas de cualquier fecha disponible
 - **Selección de curva**: Múltiples curvas por día (diferentes horas)
 - **Visualización interactiva**: Curvas IV con corriente vs voltaje
 - **Parámetros eléctricos**: PMP, ISC, VOC, IMP, VMP, Factor de Forma
 - **Descarga de datos**: Exportar datos de la curva seleccionada
+- **Conexión directa a ClickHouse**: Datos en tiempo real
 
 ## 🚀 Instalación y Uso
 
@@ -17,16 +18,16 @@ Dashboard interactivo para visualizar las curvas IV (Intensidad-Voltaje) de los 
 ```bash
 cd /home/nicole/SR/SOILING
 source .venv/bin/activate
-pip install streamlit plotly
+pip install -r requirements.txt
 ```
 
 ### 2. Ejecutar el dashboard
 ```bash
-# Opción 1: Usar el script automático
-./run_dashboard.sh
+# Ejecutar manualmente
+streamlit run dashboard_pvstand_curves_cloud.py
 
-# Opción 2: Ejecutar manualmente
-streamlit run dashboard_pvstand_curves.py
+# O con configuración específica
+streamlit run dashboard_pvstand_curves_cloud.py --server.port 8501 --server.address 0.0.0.0
 ```
 
 ### 3. Acceder al dashboard
@@ -64,12 +65,14 @@ Abrir el navegador en: `http://localhost:8501`
 
 ```
 SOILING/
-├── dashboard_pvstand_curves.py    # Dashboard principal
-├── run_dashboard.sh               # Script de ejecución
-├── requirements_dashboard.txt     # Dependencias
-├── README_Dashboard.md           # Este archivo
+├── dashboard_pvstand_curves_cloud.py  # Dashboard principal (Cloud)
+├── requirements.txt                   # Dependencias completas
+├── .streamlit/config.toml            # Configuración de Streamlit
+├── README_Dashboard.md               # Este archivo
+├── test_dashboard.py                 # Pruebas del dashboard
+├── test_all_technologies.py          # Pruebas de conectividad
 └── datos/
-    └── raw_pvstand_curves_data.csv  # Datos de curvas IV
+    └── raw_pvstand_curves_data.csv   # Datos de curvas IV (backup)
 ```
 
 ## 🔧 Requisitos
@@ -79,7 +82,10 @@ SOILING/
 - Plotly
 - Pandas
 - Numpy
-- Datos de curvas IV (archivo `raw_pvstand_curves_data.csv`)
+- ClickHouse Connect
+- InfluxDB Client
+- Conexión a ClickHouse (para datos en tiempo real)
+- Archivo de datos local (como respaldo)
 
 ## 📈 Interpretación de las Curvas
 
@@ -97,15 +103,21 @@ SOILING/
 ## 🐛 Solución de Problemas
 
 ### Error: "No se encontró el archivo"
-- Asegúrate de haber ejecutado `download_pvstand_curves` primero
-- Verifica que el archivo `raw_pvstand_curves_data.csv` existe en `/home/nicole/SR/SOILING/datos/`
+- El dashboard intenta conectarse a ClickHouse primero
+- Si falla, busca el archivo `raw_pvstand_curves_data.csv` como respaldo
+- Ejecuta `download_pvstand_curves` para generar el archivo de respaldo
+
+### Error: "Error al cargar datos desde ClickHouse"
+- Verifica la conectividad de red al servidor ClickHouse
+- Confirma que las credenciales sean correctas
+- Usa `test_all_technologies.py` para diagnosticar problemas
 
 ### Error: "No hay datos disponibles"
 - Verifica que la fecha seleccionada tenga datos
 - Cambia el módulo o la fecha
 
 ### Dashboard no carga
-- Verifica que Streamlit esté instalado: `pip install streamlit`
+- Verifica que todas las dependencias estén instaladas: `pip install -r requirements.txt`
 - Revisa los logs en la terminal
 
 ## 📞 Soporte
