@@ -1,0 +1,24 @@
+# Requisitos para el Dashboard Solar Integrado (PVStand + DustIQ)
+# Instalación: pip install -r requirements_dashboard.txt
+
+# Framework web principal
+streamlit>=1.28.0
+
+# Manipulación y análisis de datos
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Visualización interactiva
+plotly>=5.15.0
+
+# Análisis estadístico
+scipy>=1.10.0
+
+# Conexión a base de datos
+clickhouse-connect>=0.6.0
+
+# Visualización tradicional (para funciones auxiliares)
+matplotlib>=3.7.0
+
+# Utilidades adicionales
+python-dateutil>=2.8.0 
