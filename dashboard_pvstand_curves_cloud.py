@@ -55,9 +55,8 @@ def load_data_from_clickhouse():
             voltaje,
             potencia
         FROM ref_data.iv_curves_perc1_fixed_medio_dia_solar
-        WHERE fecha >= '2024-07-01'
+        WHERE fecha >= '2024-07-01' AND fecha <= '2025-07-31'
         ORDER BY fecha, hora
-        LIMIT 100000
         """
 
         # Consulta para iv_curves_perc2_fixed_medio_dia_solar
@@ -69,16 +68,18 @@ def load_data_from_clickhouse():
             voltaje,
             potencia
         FROM ref_data.iv_curves_perc2_fixed_medio_dia_solar
-        WHERE fecha >= '2024-07-01'
+        WHERE fecha >= '2024-07-01' AND fecha <= '2025-07-31'
         ORDER BY fecha, hora
-        LIMIT 100000
         """
 
         # Ejecutar consultas
+        st.info("📊 Consultando tabla perc1...")
         data_perc1_curves = client.query(query_perc1_curves)
+        st.info("📊 Consultando tabla perc2...")
         data_perc2_curves = client.query(query_perc2_curves)
 
         # Procesar datos
+        st.info("🔄 Procesando datos...")
         df_perc1_curves = pd.DataFrame(data_perc1_curves.result_set,
                                       columns=['fecha', 'hora', 'corriente', 'voltaje', 'potencia'])
         df_perc2_curves = pd.DataFrame(data_perc2_curves.result_set,
