@@ -441,10 +441,12 @@ if available_dates:
         # Botón para descargar datos
         csv = display_df.to_csv(index=False)
         modules_str = "_".join(selected_modules)
+        # Convertir selected_hora a string y reemplazar : por -
+        hora_str = str(selected_hora).replace(':', '-')
         st.download_button(
             label="📥 Descargar datos de la curva",
             data=csv,
-            file_name=f"curva_iv_{modules_str}_{selected_date}_{selected_hora.replace(':', '-')}.csv",
+            file_name=f"curva_iv_{modules_str}_{selected_date}_{hora_str}.csv",
             mime="text/csv"
         )
         
