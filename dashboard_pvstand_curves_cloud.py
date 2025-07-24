@@ -92,6 +92,7 @@ def load_data_from_clickhouse():
         df_pvstand_curves = pd.concat([df_perc1_curves, df_perc2_curves], ignore_index=True)
 
         # Convertir fecha y hora a datetime
+        df_pvstand_curves['fecha'] = pd.to_datetime(df_pvstand_curves['fecha'])
         df_pvstand_curves['timestamp'] = pd.to_datetime(df_pvstand_curves['fecha'].astype(str) + ' ' + df_pvstand_curves['hora'].astype(str))
 
         # Asegurar que esté en UTC
@@ -154,6 +155,15 @@ with st.spinner("🔄 Cargando datos de curvas IV..."):
 
 if df is None:
     st.error("❌ No se pudieron cargar los datos. Verifica la conexión a ClickHouse o la disponibilidad del archivo.")
+    st.stop()
+
+# Asegurar que las columnas de fecha sean datetime
+try:
+    df['fecha'] = pd.to_datetime(df['fecha'])
+    df['timestamp'] = pd.to_datetime(df['timestamp'])
+    st.success("✅ Fechas convertidas correctamente")
+except Exception as e:
+    st.error(f"❌ Error al convertir fechas: {e}")
     st.stop()
 
 # Sidebar para filtros
