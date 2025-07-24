@@ -195,7 +195,7 @@ PV_GLASSES_EXCEPTION_DAYS = 4
 # Configuración de formatos de tiempo
 DUSTIQ_TIME_COLUMN = 'Date&Time'
 DUSTIQ_TIME_FORMAT = '%Y-%m-%d %H:%M:%S' # Ejemplo, ajustar si es diferente
-PV_GLASSES_TIME_COLUMN = '_time' # Columna de tiempo original en raw_pv_glasses_data.csv
+PV_GLASSES_TIME_COLUMN = 'timestamp' # Columna de tiempo original en raw_pv_glasses_data.csv
 PV_GLASSES_TIME_FORMAT = '%Y-%m-%d %H:%M:%S%z' # Formato de tiempo para PV Glasses
 PV_GLASSES_TIME_COLUMN_PROCESSED = '_time_processed_utc_naive' # Nueva columna de tiempo procesada
 

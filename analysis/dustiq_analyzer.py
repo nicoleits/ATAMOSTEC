@@ -63,7 +63,7 @@ def analyze_dustiq_data(
 
     logger.info(f"Cargando datos de DustIQ desde {data_filepath}...")
     try:
-        df = pd.read_csv(data_filepath, index_col='_time', parse_dates=True)
+        df = pd.read_csv(data_filepath, index_col='timestamp', parse_dates=True)
     except Exception as e:
         logger.error(f"Error cargando el archivo CSV de DustIQ: {e}")
         return
