@@ -51,7 +51,7 @@ REFCELLS_NORMALIZE_REF_DATE_STR = '2024-07-26' # Fecha de referencia para normal
 # --- Parámetros de Soiling Kit ---
 # Basado en la función analizar_datos_soiling_kit del notebook
 SOILING_KIT_LOCAL_TIMEZONE_STR = "America/Santiago"
-SOILING_KIT_TIME_COLUMN = "_time"
+SOILING_KIT_TIME_COLUMN = "timestamp"
 SOILING_KIT_TIME_FORMAT = "%Y-%m-%d %H:%M:%S%z"
 
 SOILING_KIT_ANALYSIS_START_DATE_STR = "2024-07-23" # Fecha de inicio específica para Soiling Kit
