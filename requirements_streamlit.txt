@@ -1,4 +1,4 @@
-# Dashboard Integrado - DustIQ + PVStand
+# Dashboard Integrado v4 - DustIQ + PVStand + Soiling Kit
 # Requirements para Streamlit Cloud
 # Instalación: pip install -r requirements_streamlit.txt
 
@@ -16,4 +16,7 @@ plotly>=5.15.0
 clickhouse-connect>=0.6.0
 
 # Utilidades de fecha y tiempo
-python-dateutil>=2.8.0 
+python-dateutil>=2.8.0
+
+# Logging
+logging 
