@@ -345,44 +345,65 @@ with tab1:
         # Procesar por franjas horarias
         if selected_franjas:
             for i, franja in enumerate(selected_franjas):
-                if franja == "Mediodía Solar":
-                    # Mediodía solar (11:30-13:30)
-                    data_franja = df_sr_filtered.between_time('11:30', '13:30')
-                    if not data_franja.empty:
-                        data_procesada = data_franja.resample(freq_options[selected_freq], origin='start').quantile(0.25)
-                        color = colores[i % len(colores)]
-                        fig.add_trace(go.Scatter(
-                            x=data_procesada.index,
-                            y=data_procesada.values,
-                            mode='lines+markers',
-                            name=f'Mediodía Solar (11:30-13:30)',
-                            line=dict(color=color, width=2),
-                            marker=dict(size=4)
-                        ))
-                else:
-                    # Franjas horarias específicas
-                    if franja == "10:00-11:00":
-                        data_franja = df_sr_filtered.between_time('10:00', '11:00')
-                    elif franja == "12:00-13:00":
-                        data_franja = df_sr_filtered.between_time('12:00', '13:00')
-                    elif franja == "14:00-15:00":
-                        data_franja = df_sr_filtered.between_time('14:00', '15:00')
-                    elif franja == "16:00-17:00":
-                        data_franja = df_sr_filtered.between_time('16:00', '17:00')
+                try:
+                    if franja == "Mediodía Solar":
+                        # Mediodía solar (11:30-13:30)
+                        st.info(f"Procesando franja: {franja}")
+                        data_franja = df_sr_filtered.between_time('11:30', '13:30')
+                        st.info(f"Datos encontrados en mediodía solar: {len(data_franja)} puntos")
+                        
+                        if not data_franja.empty:
+                            data_procesada = data_franja.resample(freq_options[selected_freq], origin='start').quantile(0.25)
+                            data_procesada = data_procesada.dropna()  # Eliminar valores NaN
+                            
+                            if not data_procesada.empty:
+                                color = colores[i % len(colores)]
+                                fig.add_trace(go.Scatter(
+                                    x=data_procesada.index,
+                                    y=data_procesada.values,
+                                    mode='lines+markers',
+                                    name=f'Mediodía Solar (11:30-13:30)',
+                                    line=dict(color=color, width=2),
+                                    marker=dict(size=4)
+                                ))
+                            else:
+                                st.warning(f"No hay datos procesados para {franja}")
+                        else:
+                            st.warning(f"No hay datos en el rango de {franja}")
                     else:
-                        continue
-                    
-                    if not data_franja.empty:
-                        data_procesada = data_franja.resample(freq_options[selected_freq], origin='start').quantile(0.25)
-                        color = colores[i % len(colores)]
-                        fig.add_trace(go.Scatter(
-                            x=data_procesada.index,
-                            y=data_procesada.values,
-                            mode='lines+markers',
-                            name=f'{franja}',
-                            line=dict(color=color, width=2),
-                            marker=dict(size=4)
-                        ))
+                        # Franjas horarias específicas
+                        if franja == "10:00-11:00":
+                            data_franja = df_sr_filtered.between_time('10:00', '11:00')
+                        elif franja == "12:00-13:00":
+                            data_franja = df_sr_filtered.between_time('12:00', '13:00')
+                        elif franja == "14:00-15:00":
+                            data_franja = df_sr_filtered.between_time('14:00', '15:00')
+                        elif franja == "16:00-17:00":
+                            data_franja = df_sr_filtered.between_time('16:00', '17:00')
+                        else:
+                            continue
+                        
+                        if not data_franja.empty:
+                            data_procesada = data_franja.resample(freq_options[selected_freq], origin='start').quantile(0.25)
+                            data_procesada = data_procesada.dropna()  # Eliminar valores NaN
+                            
+                            if not data_procesada.empty:
+                                color = colores[i % len(colores)]
+                                fig.add_trace(go.Scatter(
+                                    x=data_procesada.index,
+                                    y=data_procesada.values,
+                                    mode='lines+markers',
+                                    name=f'{franja}',
+                                    line=dict(color=color, width=2),
+                                    marker=dict(size=4)
+                                ))
+                            else:
+                                st.warning(f"No hay datos procesados para {franja}")
+                        else:
+                            st.warning(f"No hay datos en el rango de {franja}")
+                except Exception as e:
+                    st.error(f"Error procesando franja {franja}: {str(e)}")
+                    continue
         else:
             # Procesar todos los datos
             df_resampled = df_sr_filtered.resample(freq_options[selected_freq], origin='start').quantile(0.25)
