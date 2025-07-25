@@ -1,7 +1,29 @@
-# 🌫️ Dashboard DustIQ - Despliegue en Streamlit Cloud
+# 🔋🌫️ Dashboard Integrado - DustIQ + PVStand
 
 ## 📋 Descripción
-Dashboard especializado para el análisis de datos de DustIQ, enfocado en el análisis de soiling ratio y pérdidas de eficiencia en sistemas fotovoltaicos.
+Sistema de dashboards especializados para el análisis de datos de DustIQ (soiling ratio) y PVStand (curvas IV), enfocado en el análisis de eficiencia y pérdidas en sistemas fotovoltaicos.
+
+## 🚀 Dashboards Disponibles
+
+### 1. 🌫️ Dashboard DustIQ (Solo Soiling Ratio)
+- **Archivo**: `streamlit_app.py`
+- **Funcionalidad**: Análisis completo de soiling ratio
+- **Características**:
+  - Vista general con métricas principales
+  - Análisis por franjas horarias
+  - Mediodía solar especializado
+  - Comparación temporal
+  - Estadísticas detalladas
+
+### 2. 🔋🌫️ Dashboard Integrado v3 (DustIQ + PVStand)
+- **Archivo**: `streamlit_app_integrado_v3.py`
+- **Funcionalidad**: Análisis combinado de ambos sistemas
+- **Características**:
+  - Filtros globales sincronizados
+  - Análisis de soiling ratio (DustIQ)
+  - Curvas IV interactivas (PVStand)
+  - Información del sistema integrada
+  - Interfaz unificada y robusta
 
 ## 🚀 Despliegue en Streamlit Cloud
 
@@ -14,50 +36,108 @@ Dashboard especializado para el análisis de datos de DustIQ, enfocado en el an�
 1. **Subir código a GitHub**
    ```bash
    git add .
-   git commit -m "Preparar dashboard para despliegue"
+   git commit -m "Actualizar dashboards"
    git push origin master
    ```
 
 2. **Conectar con Streamlit Cloud**
    - Ve a [share.streamlit.io](https://share.streamlit.io)
    - Conecta tu cuenta de GitHub
-   - Selecciona el repositorio `SOILING`
-   - Configura el archivo principal: `streamlit_app.py`
+   - Selecciona el repositorio `ATAMOSTEC`
 
-3. **Configuración**
-   - **Main file path**: `streamlit_app.py`
-   - **Python version**: 3.9 o superior
-   - **Requirements file**: `requirements_streamlit.txt`
+3. **Configuración por Dashboard**
+
+   **Para Dashboard DustIQ:**
+   - **Main file path**: `SOILING/streamlit_app.py`
+   - **Requirements file**: `SOILING/requirements_streamlit.txt`
+
+   **Para Dashboard Integrado:**
+   - **Main file path**: `SOILING/streamlit_app_integrado_v3.py`
+   - **Requirements file**: `SOILING/requirements_streamlit.txt`
 
 ## 🔧 Configuración de Base de Datos
 
 ### ClickHouse (Modo Online)
-El dashboard intentará conectarse a ClickHouse. Si no está disponible, cambiará automáticamente a modo offline.
+Los dashboards se conectan automáticamente a ClickHouse:
+- **Host**: 146.83.153.212:30091
+- **Base de datos**: PSDA.dustiq (DustIQ), ref_data.iv_curves_* (PVStand)
 
-### Archivo Local (Modo Offline)
-Si ClickHouse no está disponible, el dashboard usará datos locales almacenados en `datos/raw_dustiq_data.csv`.
+### Fallback Automático
+Si ClickHouse no está disponible, los dashboards mostrarán mensajes informativos sobre el estado de conexión.
 
-## 📊 Funcionalidades
+## 📊 Funcionalidades por Dashboard
 
-- **Vista General**: Métricas principales y evolución temporal
-- **Franjas Horarias Fijas**: Análisis por períodos específicos
-- **Mediodía Solar**: Análisis especializado en máxima irradiación
-- **Comparación Temporal**: Comparación entre diferentes períodos
-- **Estadísticas Detalladas**: Análisis estadístico completo
+### 🌫️ Dashboard DustIQ
+- **Métricas Principales**: Promedio, mediana, desviación estándar
+- **Evolución Temporal**: Gráficos con frecuencia configurable
+- **Filtros Avanzados**: Fechas, umbral SR, franjas horarias
+- **Análisis Estadístico**: Pérdidas por soiling, tendencias
+
+### 🔋🌫️ Dashboard Integrado v3
+- **Filtros Globales**: Sincronizados entre sistemas
+- **DustIQ**: Análisis completo de soiling ratio
+- **PVStand**: Curvas IV interactivas por fecha/hora
+- **Información del Sistema**: Estado de conexión y configuración
 
 ## 🎛️ Configuración de Usuario
 
+### Filtros Comunes
 - **Frecuencia Temporal**: Diario, Semanal, Mensual
-- **Franjas Horarias**: Selección personalizable
-- **Filtros de Fechas**: Rango temporal configurable
-- **Umbral SR**: Filtro por valor mínimo
+- **Rango de Fechas**: Configurable por usuario
+- **Umbral SR**: Filtro por valor mínimo (DustIQ)
+- **Módulos PVStand**: Selección de perc1fixed/perc2fixed
 
-## 🔗 Enlaces
+### Características Especiales
+- **Carga Inteligente**: Cache de datos para mejor rendimiento
+- **Manejo de Errores**: Fallbacks automáticos
+- **Interfaz Responsiva**: Optimizada para diferentes dispositivos
 
-- **Dashboard**: [URL del despliegue]
-- **Repositorio**: [URL del repositorio GitHub]
-- **Documentación**: README_Dashboard_DustIQ.md
+## 📁 Estructura del Proyecto
+
+```
+SOILING/
+├── streamlit_app.py                    # Dashboard DustIQ
+├── streamlit_app_integrado_v3.py       # Dashboard Integrado v3
+├── dashboard_integrado_v3.py           # Lógica del dashboard integrado
+├── requirements_streamlit.txt          # Dependencias para Streamlit Cloud
+├── README_DEPLOY.md                    # Este archivo
+├── README_Dashboard_DustIQ.md          # Documentación técnica DustIQ
+└── README_INI_CORREGIDO.md             # Documentación inicial
+```
+
+## 🔗 Enlaces Útiles
+
+- **Streamlit Cloud**: [share.streamlit.io](https://share.streamlit.io)
+- **GitHub**: [nicoleits/ATAMOSTEC](https://github.com/nicoleits/ATAMOSTEC)
+- **Documentación DustIQ**: README_Dashboard_DustIQ.md
+
+## 🛠️ Desarrollo Local
+
+### Instalación
+```bash
+cd SOILING
+python -m venv .venv
+source .venv/bin/activate  # En Windows: .venv\Scripts\activate
+pip install -r requirements_streamlit.txt
+```
+
+### Ejecución
+```bash
+# Dashboard DustIQ
+streamlit run streamlit_app.py
+
+# Dashboard Integrado
+streamlit run streamlit_app_integrado_v3.py
+```
+
+## 📈 Estado del Proyecto
+
+- ✅ **Dashboard DustIQ**: Funcional y estable
+- ✅ **Dashboard Integrado v3**: Funcional y optimizado
+- ✅ **Despliegue Streamlit Cloud**: Configurado
+- ✅ **Documentación**: Actualizada
+- ✅ **Código Limpio**: Archivos obsoletos eliminados
 
 ---
 
-**Desarrollado para ATAMOSTEC** | **Dashboard DustIQ** - Análisis de Soiling Ratio 
+**Desarrollado para ATAMOSTEC** | **Dashboard Integrado** - DustIQ + PVStand 
