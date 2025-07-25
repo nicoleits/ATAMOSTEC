@@ -275,10 +275,9 @@ st.sidebar.metric("Rango de fechas", f"{start_date} a {end_date}")
 # ===== INTERFAZ PRINCIPAL =====
 
 # Pestañas principales
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3 = st.tabs([
     "🌫️ DustIQ - Soiling Ratio", 
     "🔋 PVStand - Curvas IV", 
-    "📊 Comparación Integrada",
     "ℹ️ Información del Sistema"
 ])
 
@@ -486,35 +485,8 @@ with tab2:
     else:
         st.error("❌ No se pudieron cargar los datos de PVStand")
 
-# ===== PESTAÑA 3: COMPARACIÓN INTEGRADA =====
+# ===== PESTAÑA 3: INFORMACIÓN DEL SISTEMA =====
 with tab3:
-    st.subheader("📊 Comparación Integrada - DustIQ vs PVStand")
-    
-    if df_dustiq is not None and df_pvstand is not None:
-        st.info("🔍 Análisis comparativo entre sistemas de medición de soiling")
-        
-        # Métricas de comparación
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.subheader("🌫️ DustIQ")
-            if 'df_sr_filtered' in locals():
-                st.metric("Promedio SR", f"{df_sr_filtered.mean():.2f}%")
-                st.metric("Pérdida por Soiling", f"{100 - df_sr_filtered.mean():.2f}%")
-                st.metric("Datos disponibles", f"{len(df_dustiq_filtered):,} registros")
-        
-        with col2:
-            st.subheader("🔋 PVStand")
-            if 'df_pvstand_filtered' in locals():
-                total_curves = len(df_pvstand_filtered['timestamp'].dt.date.unique())
-                st.metric("Días con datos", f"{total_curves}")
-                st.metric("Curvas totales", f"{len(df_pvstand_filtered):,}")
-                st.metric("Módulos", f"{len(df_pvstand_filtered['module'].unique())}")
-    else:
-        st.error("❌ Se requieren datos de ambos sistemas para la comparación")
-
-# ===== PESTAÑA 4: INFORMACIÓN DEL SISTEMA =====
-with tab4:
     st.subheader("ℹ️ Información del Sistema")
     
     col1, col2 = st.columns(2)
