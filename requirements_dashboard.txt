@@ -21,4 +21,7 @@ clickhouse-connect>=0.6.0
 matplotlib>=3.7.0
 
 # Utilidades adicionales
-python-dateutil>=2.8.0 
+python-dateutil>=2.8.0
+
+# Dependencias adicionales para DustIQ
+scikit-learn>=1.3.0 

@@ -66,14 +66,14 @@ def load_dustiq_data_from_clickhouse():
         
         # Consulta para datos de DustIQ
         query_dustiq = """
-        SELECT
-            timestamp,
-            SR_C11_Avg,
-            SR_C12_Avg
-        FROM ref_data.dustiq_processed_data
-        WHERE timestamp >= '2024-06-24' AND timestamp <= '2025-07-31'
-        AND SR_C11_Avg > 0
-        ORDER BY timestamp
+        SELECT 
+            Stamptime,
+            Attribute,
+            Measure
+        FROM PSDA.dustiq 
+        WHERE Stamptime >= '2024-06-24' AND Stamptime <= '2025-07-31'
+        AND Attribute IN ('SR_C11_Avg', 'SR_C12_Avg')
+        ORDER BY Stamptime, Attribute
         """
         
         with st.spinner("📊 Descargando datos de DustIQ..."):
@@ -81,17 +81,30 @@ def load_dustiq_data_from_clickhouse():
         
         # Procesar datos
         with st.spinner("🔄 Procesando datos..."):
-            df_dustiq = pd.DataFrame(data_dustiq.result_set,
-                                    columns=['timestamp', 'SR_C11_Avg', 'SR_C12_Avg'])
+            df_raw = pd.DataFrame(data_dustiq.result_set,
+                                 columns=['Stamptime', 'Attribute', 'Measure'])
             
             # Convertir timestamp
-            df_dustiq['timestamp'] = pd.to_datetime(df_dustiq['timestamp'])
+            df_raw['Stamptime'] = pd.to_datetime(df_raw['Stamptime'])
             
             # Asegurar que esté en UTC naive
-            if df_dustiq['timestamp'].dt.tz is not None:
-                df_dustiq['timestamp'] = df_dustiq['timestamp'].dt.tz_localize(None)
+            if df_raw['Stamptime'].dt.tz is not None:
+                df_raw['Stamptime'] = df_raw['Stamptime'].dt.tz_localize(None)
             
-            df_dustiq.set_index('timestamp', inplace=True)
+            # Manejar duplicados antes del pivot
+            # Agrupar por Stamptime y Attribute, tomando el valor promedio si hay duplicados
+            df_clean = df_raw.groupby(['Stamptime', 'Attribute'])['Measure'].mean().reset_index()
+            
+            # Pivotar datos para obtener columnas SR_C11_Avg y SR_C12_Avg
+            df_dustiq = df_clean.pivot(index='Stamptime', columns='Attribute', values='Measure')
+            
+            # Renombrar columnas si es necesario
+            df_dustiq.columns.name = None  # Remover nombre de columnas
+            
+            # Filtrar valores > 0
+            if 'SR_C11_Avg' in df_dustiq.columns:
+                df_dustiq = df_dustiq[df_dustiq['SR_C11_Avg'] > 0]
+            
             df_dustiq = df_dustiq.sort_index()
         
         client.close()
@@ -139,6 +152,40 @@ def load_dustiq_data_from_file():
     except Exception as e:
         st.error(f"❌ Error al cargar datos desde archivo: {e}")
         return None
+
+def procesar_datos_configuracion(df_sr, selected_freq, selected_franjas, franjas_disponibles):
+    """
+    Procesa los datos según la configuración seleccionada.
+    
+    Args:
+        df_sr: Serie de pandas con datos de soiling ratio
+        selected_freq: Frecuencia temporal seleccionada ('1D', '1W', '1M')
+        selected_franjas: Lista de franjas seleccionadas
+        franjas_disponibles: Diccionario con franjas disponibles
+    
+    Returns:
+        dict: Diccionario con datos procesados por franja
+    """
+    resultados = {}
+    
+    for franja in selected_franjas:
+        if franja == "Mediodía Solar":
+            # Procesar mediodía solar (franja de 2 horas centrada en mediodía)
+            # Usar aproximación simple: 11:30-13:30
+            data_franja = df_sr.between_time('11:30', '13:30')
+            if not data_franja.empty:
+                data_procesada = data_franja.resample(selected_freq, origin='start').quantile(0.25)
+                resultados["Mediodía Solar (11:30-13:30)"] = data_procesada
+        else:
+            # Procesar franjas horarias fijas
+            if franja in franjas_disponibles:
+                start_time, end_time = franjas_disponibles[franja]
+                data_franja = df_sr.between_time(start_time, end_time)
+                if not data_franja.empty:
+                    data_procesada = data_franja.resample(selected_freq, origin='start').quantile(0.25)
+                    resultados[franja] = data_procesada
+    
+    return resultados
 
 # Cargar datos con fallback inteligente
 with st.spinner("🔄 Cargando datos de DustIQ..."):
@@ -206,6 +253,50 @@ else:
     st.error(f"❌ Columna {sr_column} no encontrada en los datos")
     st.stop()
 
+# Configuración de análisis
+st.sidebar.subheader("⚙️ Configuración de Análisis")
+
+# Frecuencia temporal
+freq_options = {
+    "Diario": "1D",
+    "Semanal": "1W", 
+    "Mensual": "1M"
+}
+selected_freq = st.sidebar.selectbox(
+    "📅 Frecuencia Temporal:",
+    list(freq_options.keys()),
+    index=1  # Semanal por defecto
+)
+
+# Franjas horarias disponibles
+franjas_disponibles = {
+    "10:00-11:00": ("10:00", "11:00"),
+    "12:00-13:00": ("12:00", "13:00"), 
+    "14:00-15:00": ("14:00", "15:00"),
+    "16:00-17:00": ("16:00", "17:00")
+}
+
+# Opciones de franjas
+franja_options = ["Todas las franjas", "Mediodía Solar", "Personalizado"]
+selected_franja_option = st.sidebar.selectbox(
+    "🕐 Franjas Horarias:",
+    franja_options,
+    index=0
+)
+
+# Selección personalizada de franjas
+selected_franjas = []
+if selected_franja_option == "Personalizado":
+    selected_franjas = st.sidebar.multiselect(
+        "🕐 Seleccionar franjas específicas:",
+        list(franjas_disponibles.keys()),
+        default=["12:00-13:00", "14:00-15:00"]
+    )
+elif selected_franja_option == "Todas las franjas":
+    selected_franjas = list(franjas_disponibles.keys())
+elif selected_franja_option == "Mediodía Solar":
+    selected_franjas = ["Mediodía Solar"]
+
 # Tipo de análisis
 analysis_type = st.sidebar.selectbox(
     "📊 Tipo de Análisis:",
@@ -229,187 +320,252 @@ st.sidebar.metric("Rango de fechas", f"{start_date} a {end_date}")
 if analysis_type == "📈 Vista General":
     st.subheader("📈 Vista General de Soiling Ratio")
     
-    # Métricas principales
-    col1, col2, col3, col4 = st.columns(4)
+    # Mostrar configuración actual
+    st.info(f"📅 **Frecuencia**: {selected_freq} | 🕐 **Franjas**: {', '.join(selected_franjas)}")
     
-    with col1:
-        st.metric(
-            "Promedio SR (%)",
-            f"{df_sr_filtered.mean():.2f}",
-            delta=f"{df_sr_filtered.mean() - 100:.2f}"
-        )
-    
-    with col2:
-        st.metric(
-            "Mediana SR (%)",
-            f"{df_sr_filtered.median():.2f}",
-            delta=f"{df_sr_filtered.median() - 100:.2f}"
-        )
-    
-    with col3:
-        st.metric(
-            "Desv. Estándar",
-            f"{df_sr_filtered.std():.2f}"
-        )
-    
-    with col4:
-        st.metric(
-            "Pérdida Promedio",
-            f"{100 - df_sr_filtered.mean():.2f}%"
-        )
-    
-    # Gráfico de serie temporal
-    st.subheader("📊 Evolución Temporal del Soiling Ratio")
-    
-    fig_timeline = go.Figure()
-    
-    fig_timeline.add_trace(go.Scatter(
-        x=df_sr_filtered.index,
-        y=df_sr_filtered.values,
-        mode='lines',
-        name='Soiling Ratio',
-        line=dict(color='blue', width=1),
-        opacity=0.7
-    ))
-    
-    # Línea de referencia al 100%
-    fig_timeline.add_hline(
-        y=100,
-        line_dash="dash",
-        line_color="red",
-        annotation_text="Referencia 100%",
-        annotation_position="top right"
+    # Procesar datos según la configuración
+    datos_procesados = procesar_datos_configuracion(
+        df_sr_filtered, 
+        freq_options[selected_freq], 
+        selected_franjas, 
+        franjas_disponibles
     )
     
-    fig_timeline.update_layout(
-        title="Evolución del Soiling Ratio en el Tiempo",
-        xaxis_title="Fecha",
-        yaxis_title="Soiling Ratio (%)",
-        height=500,
-        yaxis=dict(range=[90, 110]),
-        hovermode='x unified'
-    )
-    
-    st.plotly_chart(fig_timeline, use_container_width=True)
-    
-    # Distribución de valores
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("📊 Distribución de Valores")
+    if datos_procesados:
+        # Métricas principales (usando datos agregados)
+        datos_combinados = pd.concat(datos_procesados.values()).dropna()
         
-        fig_hist = px.histogram(
-            df_sr_filtered,
-            nbins=50,
-            title="Distribución del Soiling Ratio",
-            labels={'value': 'Soiling Ratio (%)', 'count': 'Frecuencia'}
-        )
+        col1, col2, col3, col4 = st.columns(4)
         
-        fig_hist.add_vline(
-            x=100,
-            line_dash="dash",
-            line_color="red",
-            annotation_text="Referencia 100%"
-        )
+        with col1:
+            st.metric(
+                "Promedio SR (%)",
+                f"{datos_combinados.mean():.2f}",
+                delta=f"{datos_combinados.mean() - 100:.2f}"
+            )
         
-        st.plotly_chart(fig_hist, use_container_width=True)
-    
-    with col2:
-        st.subheader("📈 Box Plot")
+        with col2:
+            st.metric(
+                "Mediana SR (%)",
+                f"{datos_combinados.median():.2f}",
+                delta=f"{datos_combinados.median() - 100:.2f}"
+            )
         
-        fig_box = go.Figure()
+        with col3:
+            st.metric(
+                "Desv. Estándar",
+                f"{datos_combinados.std():.2f}"
+            )
         
-        fig_box.add_trace(go.Box(
-            y=df_sr_filtered.values,
-            name='Soiling Ratio',
-            boxpoints='outliers',
-            marker_color='lightblue'
-        ))
+        with col4:
+            st.metric(
+                "Pérdida Promedio",
+                f"{100 - datos_combinados.mean():.2f}%"
+            )
         
-        fig_box.add_hline(
+        # Gráfico de serie temporal con datos procesados
+        st.subheader(f"📊 Evolución Temporal del Soiling Ratio ({selected_freq})")
+        
+        fig_timeline = go.Figure()
+        
+        colores = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
+        
+        for i, (franja, datos) in enumerate(datos_procesados.items()):
+            if not datos.empty:
+                color = colores[i % len(colores)]
+                
+                fig_timeline.add_trace(go.Scatter(
+                    x=datos.index,
+                    y=datos.values,
+                    mode='lines+markers',
+                    name=franja,
+                    line=dict(color=color, width=2),
+                    marker=dict(size=4),
+                    opacity=0.8
+                ))
+        
+        # Línea de referencia al 100%
+        fig_timeline.add_hline(
             y=100,
             line_dash="dash",
             line_color="red",
-            annotation_text="Referencia 100%"
+            annotation_text="Referencia 100%",
+            annotation_position="top right"
         )
         
-        fig_box.update_layout(
-            title="Distribución Estadística",
+        fig_timeline.update_layout(
+            title=f"Evolución del Soiling Ratio - {selected_freq}",
+            xaxis_title="Fecha",
             yaxis_title="Soiling Ratio (%)",
-            height=400,
-            yaxis=dict(range=[90, 110])
+            height=500,
+            yaxis=dict(range=[90, 110]),
+            hovermode='x unified',
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            )
         )
         
-        st.plotly_chart(fig_box, use_container_width=True)
+        st.plotly_chart(fig_timeline, use_container_width=True)
+    
+        # Distribución de valores
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("📊 Distribución de Valores")
+            
+            fig_hist = px.histogram(
+                datos_combinados,
+                nbins=30,
+                title=f"Distribución del Soiling Ratio ({selected_freq})",
+                labels={'value': 'Soiling Ratio (%)', 'count': 'Frecuencia'}
+            )
+            
+            fig_hist.add_vline(
+                x=100,
+                line_dash="dash",
+                line_color="red",
+                annotation_text="Referencia 100%"
+            )
+            
+            st.plotly_chart(fig_hist, use_container_width=True)
+        
+        with col2:
+            st.subheader("📈 Box Plot por Franja")
+            
+            fig_box = go.Figure()
+            
+            for franja, datos in datos_procesados.items():
+                if not datos.empty:
+                    fig_box.add_trace(go.Box(
+                        y=datos.values,
+                        name=franja,
+                        boxpoints='outliers',
+                        marker_color=colores[list(datos_procesados.keys()).index(franja) % len(colores)]
+                    ))
+            
+            fig_box.add_hline(
+                y=100,
+                line_dash="dash",
+                line_color="red",
+                annotation_text="Referencia 100%"
+            )
+            
+            fig_box.update_layout(
+                title=f"Distribución Estadística por Franja ({selected_freq})",
+                yaxis_title="Soiling Ratio (%)",
+                height=400,
+                yaxis=dict(range=[90, 110])
+            )
+            
+            st.plotly_chart(fig_box, use_container_width=True)
+    else:
+        st.warning("⚠️ No hay datos disponibles para la configuración seleccionada")
 
 # === FRANJAS HORARIAS FIJAS ===
 elif analysis_type == "🕐 Franjas Horarias Fijas":
     st.subheader("🕐 Análisis por Franjas Horarias Fijas")
     
-    col1, col2 = st.columns([2, 1])
+    # Mostrar configuración actual
+    st.info(f"📅 **Frecuencia**: {selected_freq} | 🕐 **Franjas**: {', '.join(selected_franjas)}")
     
-    with col2:
-        st.subheader("⚙️ Configuración")
+    # Procesar datos según la configuración
+    datos_procesados = procesar_datos_configuracion(
+        df_sr_filtered, 
+        freq_options[selected_freq], 
+        selected_franjas, 
+        franjas_disponibles
+    )
+    
+    if datos_procesados:
+        # Crear gráfico sin tendencias
+        fig = go.Figure()
         
-        # Seleccionar franjas horarias
-        franjas_disponibles = {
-            '10:00-11:00': ('10:00', '11:00'),
-            '12:00-13:00': ('12:00', '13:00'),
-            '14:00-15:00': ('14:00', '15:00'),
-            '15:00-16:00': ('15:00', '16:00')
-        }
+        colores = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
         
-        franjas_seleccionadas = st.multiselect(
-            "🕐 Seleccionar Franjas:",
-            list(franjas_disponibles.keys()),
-            default=['12:00-13:00', '14:00-15:00']
+        for i, (franja, datos) in enumerate(datos_procesados.items()):
+            if not datos.empty:
+                color = colores[i % len(colores)]
+                
+                fig.add_trace(go.Scatter(
+                    x=datos.index,
+                    y=datos.values,
+                    mode='lines+markers',
+                    name=franja,
+                    line=dict(color=color, width=2),
+                    marker=dict(size=4),
+                    opacity=0.8
+                ))
+        
+        # Configurar el gráfico
+        fig.update_layout(
+            title=f"Soiling Ratio - {selected_freq} - {', '.join(selected_franjas)}",
+            xaxis_title="Fecha",
+            yaxis_title="Soiling Ratio (%)",
+            height=500,
+            yaxis=dict(range=[90, 110]),
+            hovermode='x unified',
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            )
         )
         
-        mostrar_tendencias = st.checkbox("📈 Mostrar Tendencias", value=True)
+        # Línea de referencia al 100%
+        fig.add_hline(
+            y=100,
+            line_dash="dash",
+            line_color="red",
+            annotation_text="Referencia 100%",
+            annotation_position="top right"
+        )
         
-        if st.button("🔄 Actualizar Análisis"):
-            st.rerun()
-    
-    with col1:
-        if franjas_seleccionadas:
-            # Procesar datos por franjas
-            franjas_dict = {k: franjas_disponibles[k] for k in franjas_seleccionadas}
-            datos_procesados = procesar_datos_franjas_horarias(df_sr_filtered, franjas_dict)
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Estadísticas por franja
+        st.subheader("📊 Estadísticas por Franja")
+        
+        stats_franjas = []
+        for franja, datos in datos_procesados.items():
+            if not datos.empty:
+                stats_franjas.append({
+                    'Franja': franja,
+                    'Promedio (%)': f"{datos.mean():.2f}",
+                    'Mediana (%)': f"{datos.median():.2f}",
+                    'Desv. Est.': f"{datos.std():.2f}",
+                    'Pérdida (%)': f"{100 - datos.mean():.2f}",
+                    'Mínimo (%)': f"{datos.min():.2f}",
+                    'Máximo (%)': f"{datos.max():.2f}",
+                    'Puntos': len(datos)
+                })
+        
+        if stats_franjas:
+            df_stats = pd.DataFrame(stats_franjas)
+            st.dataframe(df_stats, use_container_width=True)
             
-            # Crear gráfico
-            fig_franjas = crear_grafico_franjas_horarias(
-                datos_procesados,
-                "Análisis por Franjas Horarias",
-                mostrar_tendencias=mostrar_tendencias
-            )
-            
-            st.plotly_chart(fig_franjas, use_container_width=True)
-            
-            # Estadísticas por franja
-            st.subheader("📊 Estadísticas por Franja")
-            
-            stats_franjas = []
-            for franja, datos in datos_procesados.items():
-                if not datos.empty:
-                    slope, intercept, r_squared = calcular_tendencia_dustiq(
-                        np.arange(len(datos)), datos.values
+            # Exportar datos
+            if st.button("📥 Exportar Datos"):
+                csv_data = pd.DataFrame()
+                for franja, datos in datos_procesados.items():
+                    if not datos.empty:
+                        csv_data[franja] = datos
+                
+                if not csv_data.empty:
+                    csv = csv_data.to_csv(index=True)
+                    st.download_button(
+                        label="💾 Descargar CSV",
+                        data=csv,
+                        file_name=f"dustiq_franjas_{selected_freq.lower()}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        mime="text/csv"
                     )
-                    
-                    stats_franjas.append({
-                        'Franja': franja,
-                        'Promedio (%)': f"{datos.mean():.2f}",
-                        'Mediana (%)': f"{datos.median():.2f}",
-                        'Desv. Est.': f"{datos.std():.2f}",
-                        'Pérdida (%)': f"{100 - datos.mean():.2f}",
-                        'Tendencia (%/día)': f"{slope * 100:.4f}" if slope else "N/A",
-                        'R²': f"{r_squared:.3f}" if r_squared else "N/A"
-                    })
-            
-            if stats_franjas:
-                df_stats = pd.DataFrame(stats_franjas)
-                st.dataframe(df_stats, use_container_width=True)
-        else:
-            st.warning("⚠️ Por favor selecciona al menos una franja horaria")
+    else:
+        st.warning("⚠️ No hay datos disponibles para las franjas seleccionadas")
 
 # === MEDIODÍA SOLAR ===
 elif analysis_type == "☀️ Mediodía Solar":
