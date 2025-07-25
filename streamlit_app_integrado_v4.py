@@ -1,44 +1,48 @@
 #!/usr/bin/env python3
 """
-Streamlit App Integrado v4 - Entry Point para Streamlit Cloud
-Dashboard Integrado: DustIQ + PVStand + Soiling Kit
+Dashboard Integrado v4 - DustIQ + PVStand + Soiling Kit
+Archivo principal para despliegue en Streamlit Cloud
+Versión simplificada y robusta
 """
 
 import streamlit as st
 import sys
 import os
 
-# Verificar que plotly esté disponible
-try:
-    import plotly.graph_objects as go
-    import plotly.express as px
-except ImportError as e:
-    st.error(f"Error: No se pudo importar plotly. {e}")
-    st.error("Verifica que plotly esté incluido en requirements_streamlit.txt")
-    st.stop()
+# Configuración de la página
+st.set_page_config(
+    page_title="Dashboard Integrado v4 - DustIQ + PVStand + Soiling Kit",
+    page_icon="🔋🌫️🌪️",
+    layout="wide"
+)
 
-# Verificar que pandas esté disponible
-try:
-    import pandas as pd
-    import numpy as np
-except ImportError as e:
-    st.error(f"Error: No se pudo importar pandas/numpy. {e}")
-    st.stop()
-
-# Verificar que clickhouse-connect esté disponible
-try:
-    import clickhouse_connect
-except ImportError as e:
-    st.error(f"Error: No se pudo importar clickhouse-connect. {e}")
-    st.stop()
-
-# Agregar el directorio actual al path
+# Agregar el directorio actual al path para importaciones
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# Importar el dashboard principal
 try:
-    from dashboard_integrado_v4 import *
-except ImportError as e:
-    st.error(f"Error al importar el dashboard: {e}")
-    st.error("Verifica que el archivo dashboard_integrado_v4.py esté presente")
-    st.stop() 
+    # Importar y ejecutar el dashboard integrado v4
+    import dashboard_integrado_v4
+
+    # El dashboard se ejecuta automáticamente al importar el módulo
+
+except Exception as e:
+    st.error(f"❌ Error al cargar el dashboard integrado v4: {str(e)}")
+    st.info("🔄 Intentando cargar en modo de respaldo...")
+
+    # Modo de respaldo: mostrar información básica
+    st.title("🔋🌫️🌪️ Dashboard Integrado v4 - DustIQ + PVStand + Soiling Kit")
+    st.markdown("---")
+
+    st.warning("⚠️ El dashboard integrado v4 no pudo cargarse completamente.")
+    st.info("📋 Información del sistema:")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.write(f"**Python version:** {sys.version}")
+        st.write(f"**Streamlit version:** {st.__version__}")
+
+    with col2:
+        st.write(f"**Working directory:** {os.getcwd()}")
+        st.write(f"**Files in directory:** {len(os.listdir('.'))}")
+
+    st.error("🔧 Por favor, verifica la configuración del despliegue.") 
