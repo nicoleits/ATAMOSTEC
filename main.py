@@ -3,6 +3,16 @@ from typing import List, Callable, Dict, Any
 import os
 from datetime import datetime
 
+# Agregar el directorio raíz del proyecto al path
+project_root = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, project_root)
+
+# Importar configuraciones de rutas
+from config.paths import (
+    TEMP_DATA_COMBINED_PROCESSED_CSV,
+    BASE_INPUT_DIR
+)
+
 # Importar el sistema de preprocesamiento
 from data_processing.data_preprocessor import run_preprocessing
 
@@ -36,7 +46,7 @@ ANALYSIS_OPTIONS = {
 # Análisis que requieren preprocesamiento específico
 ANALYSES_REQUIRING_PREPROCESSING = {
     4: ["temperature_data"],  # PVStand requiere datos de temperatura
-    5: ["temperature_data"],  # PVStand - Mediodía Solar requiere datos de temperatura
+    5: ["data_temp"],  # PVStand - Mediodía Solar requiere datos de temperatura
     8: ["iv600_data"]         # IV600 Filtrado requiere datos procesados
 }
 
@@ -69,29 +79,12 @@ def get_user_selection() -> List[int]:
             print("Error: Ingresa números separados por coma.")
 
 def check_and_run_preprocessing(selected_analyses: List[int], force_reprocess: bool = False) -> bool:
-    """
-    Verifica si los análisis seleccionados requieren preprocesamiento y lo ejecuta si es necesario.
+    """Verifica si se necesita preprocesamiento y lo ejecuta si es necesario."""
     
-    Args:
-        selected_analyses: Lista de análisis seleccionados
-        force_reprocess: Si es True, fuerza el reprocesamiento
-    
-    Returns:
-        True si el preprocesamiento fue exitoso o no era necesario, False en caso contrario
-    """
-    # Verificar si algún análisis seleccionado requiere preprocesamiento
-    requires_preprocessing = any(analysis in ANALYSES_REQUIRING_PREPROCESSING for analysis in selected_analyses)
-    
-    if not requires_preprocessing and not force_reprocess:
-        print("Los análisis seleccionados no requieren preprocesamiento específico.")
-        return True
-    
-    print("\n=== VERIFICANDO NECESIDAD DE PREPROCESAMIENTO ===")
-    
-    # Verificar archivos de salida existentes
+    # Verificar archivos de salida existentes usando rutas centralizadas
     preprocessing_needed = False
-    temp_data_exists = os.path.exists(os.path.join("datos", "data_temp.csv"))  # Archivo generado por notebook
-    iv600_data_exists = os.path.exists(os.path.join("datos", "processed_iv600_data.csv"))
+    temp_data_exists = os.path.exists(TEMP_DATA_COMBINED_PROCESSED_CSV)  # Archivo generado por notebook
+    iv600_data_exists = os.path.exists(os.path.join(BASE_INPUT_DIR, "processed_iv600_data.csv"))
     
     for analysis in selected_analyses:
         if analysis in ANALYSES_REQUIRING_PREPROCESSING:
@@ -114,7 +107,7 @@ def check_and_run_preprocessing(selected_analyses: List[int], force_reprocess: b
         if success:
             print("✅ Preprocesamiento completado exitosamente")
             # Verificar nuevamente si los datos de temperatura están disponibles
-            if not os.path.exists(os.path.join("datos", "data_temp.csv")):
+            if not os.path.exists(TEMP_DATA_COMBINED_PROCESSED_CSV):
                 print("⚠️ ADVERTENCIA: Datos de temperatura aún no disponibles")
                 print("📋 Ejecuta el notebook 'download/download_temp_only.ipynb' para generar data_temp.csv")
             return True

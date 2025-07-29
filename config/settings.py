@@ -11,8 +11,8 @@ ANALYSIS_END_DATE_GENERAL = pd.to_datetime(ANALYSIS_END_DATE_GENERAL_STR, dayfir
 # --- Parámetros de PVStand (ejemplos, se completarán) ---
 PVSTAND_FILTER_START_TIME = '13:00'
 PVSTAND_FILTER_END_TIME = '18:00'
-PVSTAND_MODULE_SOILED_ID = 'PERC1_fixed_1MD43420160719'
-PVSTAND_MODULE_REFERENCE_ID = 'PERC2_fixed_1MD43920160719'
+PVSTAND_MODULE_SOILED_ID = 'perc1fixed'
+PVSTAND_MODULE_REFERENCE_ID = 'perc2fixed'
 PVSTAND_TEMP_SENSOR_SOILED_COL = '1TE416(C)'
 PVSTAND_TEMP_SENSOR_REFERENCE_COL = '1TE418(C)'
 PVSTAND_ALPHA_ISC_CORR = 0.0004 
@@ -126,14 +126,14 @@ PVSTAND_STC_GHI = 1000
 PVSTAND_STC_TEMP = 25
 # Nuevos parámetros basados en el notebook
 PVSTAND_ANALYSIS_START_DATE_STR = '2024-08-01' # Fecha de inicio del análisis para PVStand
-PVSTAND_ANALYSIS_END_DATE_STR = '2025-06-23'   # Fecha de fin del análisis para PVStand
+PVSTAND_ANALYSIS_END_DATE_STR = '2025-07-28'   # Fecha de fin del análisis para PVStand
 PVSTAND_RESAMPLE_FREQ_MINUTES = 1             # Frecuencia de remuestreo en minutos para PVStand
 PVSTAND_GRAPH_QUANTILE = 0.25                 # Cuantil para agregaciones en gráficos de PVStand
 # Tomados de la sección superior de PVStand para consistencia, ya que la función del notebook los usa
 PVSTAND_FILTER_START_TIME = '13:00'
 PVSTAND_FILTER_END_TIME = '18:00'
-PVSTAND_MODULE_SOILED_ID = 'PERC1_fixed_1MD43420160719'
-PVSTAND_MODULE_REFERENCE_ID = 'PERC2_fixed_1MD43920160719'
+PVSTAND_MODULE_SOILED_ID = 'perc1fixed'
+PVSTAND_MODULE_REFERENCE_ID = 'perc2fixed'
 PVSTAND_TEMP_SENSOR_SOILED_COL = '1TE416(C)'
 PVSTAND_TEMP_SENSOR_REFERENCE_COL = '1TE418(C)'
 PVSTAND_ALPHA_ISC_CORR = -0.0004 

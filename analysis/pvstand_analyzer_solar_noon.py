@@ -53,10 +53,14 @@ def filter_by_solar_noon(df, hours_window=2.5):
         return df
         
     logger.info(f"Aplicando filtro de medio día solar (±{hours_window} horas alrededor del medio día solar real)")
+    logger.info(f"DataFrame original: {len(df)} filas, rango: {df.index.min()} a {df.index.max()}")
+    logger.info(f"Zona horaria del índice: {df.index.tz}")
     
     # Obtener rango de fechas del DataFrame
     start_date = df.index.min().date()
     end_date = df.index.max().date()
+    
+    logger.info(f"Rango de fechas para cálculo solar: {start_date} a {end_date}")
     
     # Inicializar utilidades de medio día solar con parámetros correctos
     solar_utils = UtilsMedioDiaSolar(
@@ -77,22 +81,46 @@ def filter_by_solar_noon(df, hours_window=2.5):
         logger.warning("No se pudieron calcular intervalos de medio día solar. Retornando DataFrame vacío.")
         return pd.DataFrame()
     
+    logger.info(f"Intervalos solares calculados: {len(solar_intervals_df)}")
+    
     # Crear máscara para filtrar por medio día solar
     mask = pd.Series(False, index=df.index)
     
+    # Asegurar que el índice del DataFrame esté en UTC
+    df_utc = df.copy()
+    if df_utc.index.tz is None:
+        df_utc.index = df_utc.index.tz_localize('UTC')
+    elif df_utc.index.tz != timezone.utc:
+        df_utc.index = df_utc.index.tz_convert('UTC')
+    
+    logger.info(f"DataFrame convertido a UTC: {len(df_utc)} filas, rango: {df_utc.index.min()} a {df_utc.index.max()}")
+    
     # Aplicar cada intervalo de medio día solar
-    for _, row in solar_intervals_df.iterrows():
-        start_time = pd.Timestamp(row[0], tz='UTC')
-        end_time = pd.Timestamp(row[1], tz='UTC')
+    for i, (_, row) in enumerate(solar_intervals_df.iterrows()):
+        # Los intervalos ya están en UTC naive, convertirlos a UTC aware
+        start_time = pd.Timestamp(row[0]).tz_localize('UTC')
+        end_time = pd.Timestamp(row[1]).tz_localize('UTC')
+        
+        logger.info(f"Intervalo {i+1}: {start_time} - {end_time}")
         
         # Aplicar máscara para este intervalo
-        interval_mask = (df.index >= start_time) & (df.index <= end_time)
+        interval_mask = (df_utc.index >= start_time) & (df_utc.index <= end_time)
         mask = mask | interval_mask
         
-        logger.debug(f"Intervalo medio día solar: {start_time} - {end_time}")
+        # Contar cuántos puntos caen en este intervalo
+        points_in_interval = interval_mask.sum()
+        logger.info(f"  Puntos en este intervalo: {points_in_interval}")
     
-    filtered_df = df[mask]
+    filtered_df = df_utc[mask]
     logger.info(f"Filtro de medio día solar aplicado: {len(df)} -> {len(filtered_df)} puntos ({len(filtered_df)/len(df)*100:.1f}%)")
+    
+    if filtered_df.empty:
+        logger.warning("⚠️ DataFrame vacío después del filtro solar. Verificando intervalos...")
+        logger.info(f"Rango de datos: {df_utc.index.min()} a {df_utc.index.max()}")
+        for i, (_, row) in enumerate(solar_intervals_df.iterrows()):
+            start_time = pd.Timestamp(row[0]).tz_localize('UTC')
+            end_time = pd.Timestamp(row[1]).tz_localize('UTC')
+            logger.info(f"Intervalo {i+1}: {start_time} - {end_time}")
     
     return filtered_df
 
@@ -173,26 +201,27 @@ def analyze_pvstand_data_solar_noon(
     if os.path.exists(pv_iv_data_filepath):
         logger.info("Cargando datos PVStand IV...")
         try:
-            use_cols_iv = ['_time', '_measurement', 'Imax', 'Pmax', 'Umax']
-            df_pvstand_raw_data = pd.read_csv(
-                pv_iv_data_filepath, 
-                usecols=lambda c: c in use_cols_iv or c.startswith('_time')
-            )
+            # Verificar la estructura de los datos
+            df_sample = pd.read_csv(pv_iv_data_filepath, nrows=5)
+            logger.info(f"Columnas encontradas: {df_sample.columns.tolist()}")
             
-            time_col_actual = [col for col in df_pvstand_raw_data.columns if col.startswith('_time')]
+            # Cargar datos completos
+            df_pvstand_raw_data = pd.read_csv(pv_iv_data_filepath)
+            
+            time_col_actual = [col for col in df_pvstand_raw_data.columns if col.startswith('timestamp')]
             if not time_col_actual:
-                logger.error("No se encontró la columna '_time' en los datos IV de PVStand.")
+                logger.error("No se encontró la columna 'timestamp' en los datos IV de PVStand.")
                 return False
-            if time_col_actual[0] != '_time':
-                df_pvstand_raw_data.rename(columns={time_col_actual[0]: '_time'}, inplace=True)
+            if time_col_actual[0] != 'timestamp':
+                df_pvstand_raw_data.rename(columns={time_col_actual[0]: 'timestamp'}, inplace=True)
 
-            df_pvstand_raw_data['_time'] = pd.to_datetime(
-                df_pvstand_raw_data['_time'], 
+            df_pvstand_raw_data['timestamp'] = pd.to_datetime(
+                df_pvstand_raw_data['timestamp'], 
                 errors='coerce', 
                 format=settings.PVSTAND_IV_DATA_TIME_FORMAT
             )
-            df_pvstand_raw_data.dropna(subset=['_time'], inplace=True)
-            df_pvstand_raw_data.set_index('_time', inplace=True)
+            df_pvstand_raw_data.dropna(subset=['timestamp'], inplace=True)
+            df_pvstand_raw_data.set_index('timestamp', inplace=True)
             logger.info(f"Datos PVStand IV cargados: {len(df_pvstand_raw_data)} filas iniciales.")
 
             # Asegurar zona horaria UTC
@@ -203,7 +232,7 @@ def analyze_pvstand_data_solar_noon(
             
             logger.info(f"Zona horaria del índice PVStand asegurada a UTC: {df_pvstand_raw_data.index.tz}")
 
-            # Pivotar datos si es necesario
+            # Verificar si necesitamos pivotar o si ya tenemos la estructura correcta
             if '_measurement' in df_pvstand_raw_data.columns:
                 logger.info("Pivotando datos PVStand IV por '_measurement'...")
                 values_to_pivot = [col for col in ['Imax', 'Pmax', 'Umax'] if col in df_pvstand_raw_data.columns]
@@ -219,6 +248,40 @@ def analyze_pvstand_data_solar_noon(
                 df_pvstand_pivot.columns = [f'{col[1]}_{col[0]}' for col in df_pvstand_pivot.columns]
                 df_pvstand_raw_data = df_pvstand_pivot
                 logger.info(f"Datos PVStand IV pivotados. {len(df_pvstand_raw_data)} filas. Columnas ejemplo: {df_pvstand_raw_data.columns[:5].tolist()}...")
+            else:
+                # Los datos ya tienen la estructura correcta (pmax, imax, umax, module)
+                logger.info("Datos PVStand IV ya tienen estructura correcta (sin pivotado necesario)")
+                logger.info(f"Columnas disponibles: {df_pvstand_raw_data.columns.tolist()}")
+                
+                # Renombrar columnas si es necesario para mantener compatibilidad
+                column_mapping = {
+                    'pmax': 'Pmax',
+                    'imax': 'Imax', 
+                    'umax': 'Umax'
+                }
+                
+                for old_col, new_col in column_mapping.items():
+                    if old_col in df_pvstand_raw_data.columns:
+                        df_pvstand_raw_data.rename(columns={old_col: new_col}, inplace=True)
+                        logger.info(f"Columna renombrada: {old_col} -> {new_col}")
+                
+                # Si hay columna 'module', crear columnas separadas para cada módulo
+                if 'module' in df_pvstand_raw_data.columns:
+                    logger.info("Separando datos por módulo...")
+                    modules = df_pvstand_raw_data['module'].unique()
+                    logger.info(f"Módulos encontrados: {modules}")
+                    
+                    # Crear DataFrame pivotado por módulo
+                    df_pvstand_pivot = df_pvstand_raw_data.pivot_table(
+                        index=df_pvstand_raw_data.index,
+                        columns='module',
+                        values=['Pmax', 'Imax', 'Umax']
+                    )
+                    
+                    # Renombrar columnas para mantener formato esperado
+                    df_pvstand_pivot.columns = [f'{col[1]}_{col[0]}' for col in df_pvstand_pivot.columns]
+                    df_pvstand_raw_data = df_pvstand_pivot
+                    logger.info(f"Datos separados por módulo. {len(df_pvstand_raw_data)} filas. Columnas: {df_pvstand_raw_data.columns.tolist()}")
 
             # Filtrar por rango de fechas
             start_date_only = pd.Timestamp(start_date_dt.date(), tz='UTC')
