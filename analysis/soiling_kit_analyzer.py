@@ -450,7 +450,37 @@ def analyze_soiling_kit_data(raw_data_filepath: str) -> bool:
         ax8.set_title('Soiling Kit - Temperaturas de Módulos (Media Diaria)', fontsize=16)
         if ax8.has_data(): ax8.legend(fontsize=12)
         ax8.tick_params(axis='both', labelsize=12)
+        
+        # Corregir el problema de etiquetas sobrepuestas en el eje X
         ax8.xaxis.set_major_formatter(date_fmt_daily)
+        
+        # Ajustar el espaciado de las etiquetas del eje X para evitar sobreposición
+        # Obtener las posiciones actuales de los ticks
+        tick_positions = ax8.get_xticks()
+        tick_labels = ax8.get_xticklabels()
+        
+        if len(tick_positions) > 10:  # Si hay muchas etiquetas, espaciarlas
+            # Mostrar solo algunas etiquetas para evitar sobreposición
+            num_ticks_to_show = 10
+            tick_spacing = max(1, len(tick_positions) // num_ticks_to_show)
+            indices_to_show = list(range(0, len(tick_positions), tick_spacing))
+            
+            # Asegurar que se muestre la última etiqueta
+            if len(tick_positions) > 0 and (len(tick_positions) - 1) not in indices_to_show:
+                if not indices_to_show or (len(tick_positions) - 1 - indices_to_show[-1]) >= tick_spacing // 2:
+                    indices_to_show.append(len(tick_positions) - 1)
+            
+            selected_positions = [tick_positions[i] for i in indices_to_show if i < len(tick_positions)]
+            selected_labels = [tick_labels[i] for i in indices_to_show if i < len(tick_labels)]
+            ax8.set_xticks(selected_positions)
+            ax8.set_xticklabels(selected_labels, rotation=45, ha='right')
+        else:
+            # Si hay pocas etiquetas, solo rotarlas
+            ax8.tick_params(axis='x', rotation=45)
+        
+        # Ajustar el layout para evitar cortes
+        fig8.tight_layout()
+        
         save_plot_matplotlib(fig8, 'sk_temperaturas_modulos_daily.png', paths.SOILING_KIT_OUTPUT_SUBDIR_GRAPH)
         print("Mostrando figura 8: Temperaturas de Módulos (Media Diaria)")
         plt.show()

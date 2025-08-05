@@ -52,16 +52,34 @@ def load_dustiq_mediodia_solar():
         csv_path = os.path.join(paths.BASE_OUTPUT_CSV_DIR, "dustiq", "dustiq_sr_mediodia_semanal_q25.csv")
         if os.path.exists(csv_path):
             df = pd.read_csv(csv_path)
-            # Convertir la columna de tiempo a datetime
-            df['_time'] = pd.to_datetime(df['_time'])
-            df.set_index('_time', inplace=True)
-            logger.info(f"Datos DustIQ mediodía solar cargados: {df.shape}")
-            return df
+            logger.info(f"Archivo DustIQ encontrado: {csv_path}")
+            logger.info(f"Columnas disponibles: {list(df.columns)}")
+            logger.info(f"Primeras filas: {df.head()}")
+            
+            # Buscar la columna de tiempo correcta
+            time_col = None
+            for col in ['timestamp', '_time', 'time', 'date']:
+                if col in df.columns:
+                    time_col = col
+                    break
+            
+            if time_col:
+                # Convertir la columna de tiempo a datetime
+                df[time_col] = pd.to_datetime(df[time_col])
+                df.set_index(time_col, inplace=True)
+                logger.info(f"Datos DustIQ mediodía solar cargados: {df.shape}")
+                logger.info(f"Rango de fechas: {df.index.min()} a {df.index.max()}")
+                return df
+            else:
+                logger.error(f"No se encontró columna de tiempo en DustIQ. Columnas disponibles: {list(df.columns)}")
+                return pd.DataFrame()
         else:
             logger.warning(f"Archivo no encontrado: {csv_path}")
             return pd.DataFrame()
     except Exception as e:
         logger.error(f"Error cargando datos DustIQ mediodía solar: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
         return pd.DataFrame()
 
 def load_soiling_kit_raw_q25():
@@ -188,11 +206,27 @@ def create_consolidated_weekly_q25_plot():
     logger.info("Iniciando generación de gráfico consolidado con curvas específicas...")
     
     # Cargar todos los datos específicos
+    logger.info("=== CARGANDO DATOS ===")
+    
     ref_cells_data = load_ref_cells_photocells()
+    logger.info(f"RefCells cargados: {not ref_cells_data.empty} - Shape: {ref_cells_data.shape if not ref_cells_data.empty else 'N/A'}")
+    
     dustiq_data = load_dustiq_mediodia_solar()
+    logger.info(f"DustIQ cargados: {not dustiq_data.empty} - Shape: {dustiq_data.shape if not dustiq_data.empty else 'N/A'}")
+    if not dustiq_data.empty:
+        logger.info(f"DustIQ columnas: {list(dustiq_data.columns)}")
+        logger.info(f"DustIQ rango fechas: {dustiq_data.index.min()} a {dustiq_data.index.max()}")
+    
     soiling_kit_data = load_soiling_kit_raw_q25()
+    logger.info(f"Soiling Kit cargados: {not soiling_kit_data.empty} - Shape: {soiling_kit_data.shape if not soiling_kit_data.empty else 'N/A'}")
+    
     pvstand_data = load_pvstand_solar_noon_corrected()
+    logger.info(f"PVStand cargados: {not pvstand_data.empty} - Shape: {pvstand_data.shape if not pvstand_data.empty else 'N/A'}")
+    
     iv600_data = load_iv600_both_curves()
+    logger.info(f"IV600 cargados: {not iv600_data.empty} - Shape: {iv600_data.shape if not iv600_data.empty else 'N/A'}")
+    
+    logger.info("=== FIN CARGA DE DATOS ===")
     
     # Verificar si hay datos para graficar
     if (ref_cells_data.empty and dustiq_data.empty and 
@@ -223,20 +257,30 @@ def create_consolidated_weekly_q25_plot():
             if not series.empty:
                 series_norm = normalize_series_to_100(series, f"RefCells {col}")
                 series_norm.plot(ax=ax, style='o-', color=colors['ref_cells'], 
-                               alpha=0.8, linewidth=2, markersize=6, 
-                               label=f'Photocells Methodology', marker='o')
+                               alpha=0.9, linewidth=2, markersize=6, 
+                               label=f'RefCells - Photocells', marker='o')
                 plotted_series.append(f'RefCells - Photocells')
     
     # Graficar DustIQ Mediodía Solar
+    logger.info("=== GRAFICANDO DUSTIQ ===")
     if not dustiq_data.empty:
+        logger.info(f"DustIQ tiene {len(dustiq_data.columns)} columnas: {list(dustiq_data.columns)}")
         for col in dustiq_data.columns:
             series = dustiq_data[col].dropna()
+            logger.info(f"Columna {col}: {len(series)} puntos no-nulos")
             if not series.empty:
+                logger.info(f"Serie {col} - Primer valor: {series.iloc[0]:.2f}, Último valor: {series.iloc[-1]:.2f}")
                 series_norm = normalize_series_to_100(series, f"DustIQ {col}")
                 series_norm.plot(ax=ax, style='o-', color=colors['dustiq'], 
-                               alpha=0.8, linewidth=2, markersize=6, 
+                               alpha=0.9, linewidth=2, markersize=6, 
                                label='DustIQ', marker='o')
                 plotted_series.append('DustIQ - Q25 Semanal')
+                logger.info(f"DustIQ graficado exitosamente")
+            else:
+                logger.warning(f"Serie {col} está vacía después de dropna()")
+    else:
+        logger.warning("DustIQ está vacío, no se puede graficar")
+    logger.info("=== FIN GRAFICADO DUSTIQ ===")
     
     # Graficar Soiling Kit Raw Q25
     if not soiling_kit_data.empty:
@@ -245,7 +289,7 @@ def create_consolidated_weekly_q25_plot():
             if not series.empty:
                 series_norm = normalize_series_to_100(series, f"Soiling Kit {col}")
                 series_norm.plot(ax=ax, style='o-', color=colors['soiling_kit'], 
-                               alpha=0.8, linewidth=2, markersize=6, 
+                               alpha=0.9, linewidth=2, markersize=6, 
                                label='SoilRatio', marker='o')
                 plotted_series.append('Soiling Kit - SR Raw Q25')
     
@@ -260,7 +304,7 @@ def create_consolidated_weekly_q25_plot():
             if not series.empty:
                 series_norm = normalize_series_to_100(series, label_map.get(col, col))
                 series_norm.plot(ax=ax, style='o-', color=color_map.get(col, None),
-                                alpha=0.8, linewidth=2, markersize=6,
+                                alpha=0.9, linewidth=2, markersize=6,
                                 label=label_map.get(col, col), marker='o')
                 plotted_series.append(label_map.get(col, col))
     
@@ -272,7 +316,7 @@ def create_consolidated_weekly_q25_plot():
                 series_norm = normalize_series_to_100(series, f"IV600 {col}")
                 color = colors['iv600_pmax'] if 'Pmax' in col or 'Pmp' in col else colors['iv600_isc']
                 series_norm.plot(ax=ax, style='o-', color=color, 
-                               alpha=0.8, linewidth=2, markersize=6, 
+                               alpha=0.9, linewidth=2, markersize=6, 
                                label=f'IV Curva Tracer 2 {col}', marker='o')
                 plotted_series.append(f'IV Curva Tracer 2 {col}')
     
@@ -339,7 +383,7 @@ def create_synchronized_weekly_q25_plot():
         for col in ref_cells_data.columns:
             series = ref_cells_data[col].dropna()
             if not series.empty:
-                all_series['Photocells Methodology'] = series
+                all_series['RefCells - Photocells'] = series
     
     # DustIQ Mediodía Solar
     if not dustiq_data.empty:
@@ -464,7 +508,7 @@ def create_synchronized_weekly_q25_plot():
         
         # Usar ax.plot para asegurar fechas correctas en el eje X
         ax.plot(series.index, series.values, 'o--', color=color, 
-                alpha=0.8, linewidth=2, markersize=8, 
+                alpha=0.9, linewidth=2, markersize=8, 
                 label=name, marker='o')
     
     # Configurar el gráfico
