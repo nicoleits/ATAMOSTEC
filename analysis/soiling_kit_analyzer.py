@@ -442,10 +442,11 @@ def analyze_soiling_kit_data(raw_data_filepath: str) -> bool:
 
         # Temperaturas Módulos (Media Diaria)
         fig8, ax8 = plt.subplots(figsize=(15, 7))
-        if not df_sk[temp_soiled_col].dropna().empty: df_sk[temp_soiled_col].resample('D').mean().plot(ax=ax8, label=f'{temp_soiled_col} (Expuesto)')
-        if not df_sk[temp_ref_col].dropna().empty: df_sk[temp_ref_col].resample('D').mean().plot(ax=ax8, label=f'{temp_ref_col} (Protegido)')
+        if not df_sk[temp_soiled_col].dropna().empty: df_sk[temp_soiled_col].resample('D').mean().plot(ax=ax8, label=f'{temp_soiled_col} (Expuesto)', style='*')
+        if not df_sk[temp_ref_col].dropna().empty: df_sk[temp_ref_col].resample('D').mean().plot(ax=ax8, label=f'{temp_ref_col} (Protegido)', style='*')
         ax8.set_ylabel('Temperatura [°C]', fontsize=16)
         ax8.set_xlabel('Tiempo', fontsize=14)
+        ax8.set_xlim(pd.Timestamp('2025-01-01', tz='UTC'), pd.Timestamp('2025-08-05 23:59:59', tz='UTC'))
         ax8.grid(True)
         ax8.set_title('Soiling Kit - Temperaturas de Módulos (Media Diaria)', fontsize=16)
         if ax8.has_data(): ax8.legend(fontsize=12)
@@ -504,14 +505,14 @@ def analyze_soiling_kit_data(raw_data_filepath: str) -> bool:
         plt.close(fig8b)
 
         # Temperaturas Módulos (Datos en Bruto) solo abril y mayo 2025
-        start_abr_may = pd.Timestamp('2025-04-01', tz='UTC')
-        end_abr_may = pd.Timestamp('2025-05-31 23:59:59', tz='UTC')
-        df_sk_abr_may = df_sk[(df_sk.index >= start_abr_may) & (df_sk.index <= end_abr_may)]
+        start_plot = pd.Timestamp('2025-07-01', tz='UTC')
+        end_plot = pd.Timestamp('2025-08-05 23:59:59', tz='UTC')
+        df_sk_plot = df_sk[(df_sk.index >= start_plot) & (df_sk.index <= end_plot)]
         fig8c, ax8c = plt.subplots(figsize=(15, 7))
-        if not df_sk_abr_may[temp_soiled_col].dropna().empty:
-            df_sk_abr_may[temp_soiled_col].plot(ax=ax8c, label=f'{temp_soiled_col} (Expuesto)', alpha=0.7, style='.')
-        if not df_sk_abr_may[temp_ref_col].dropna().empty:
-            df_sk_abr_may[temp_ref_col].plot(ax=ax8c, label=f'{temp_ref_col} (Protegido)', alpha=0.7, style='.')
+        if not df_sk_plot[temp_soiled_col].dropna().empty:
+            df_sk_plot[temp_soiled_col].plot(ax=ax8c, label=f'{temp_soiled_col} (Expuesto)', alpha=0.7, style='.')
+        if not df_sk_plot[temp_ref_col].dropna().empty:
+            df_sk_plot[temp_ref_col].plot(ax=ax8c, label=f'{temp_ref_col} (Protegido)', alpha=0.7, style='.')
         ax8c.set_ylabel('Temperatura [°C]', fontsize=16)
         ax8c.set_xlabel('Tiempo', fontsize=14)
         ax8c.grid(True)

@@ -148,8 +148,8 @@ PVSTAND_SR_MAX_FILTER_THRESHOLD = 1.02
 
 # --- Settings para Ref Cells Analyzer ---
 REFCELLS_LOCAL_TIMEZONE_STR = "America/Santiago"
-REFCELLS_TIME_COLUMN = "_time" # Nombre de la columna de tiempo en los datos de celdas de referencia
-REFCELLS_TIME_FORMAT = "%Y-%m-%d %H:%M:%S" # Formato de la columna de tiempo, ej: 2024-07-24 13:00:00
+REFCELLS_TIME_COLUMN = "timestamp" # Nombre de la columna de tiempo en los datos de celdas de referencia
+REFCELLS_TIME_FORMAT = "%Y-%m-%d %H:%M:%S%z" # Formato de la columna de tiempo con zona horaria, ej: 2024-07-24 13:00:00+00:00
 # Columnas de datos y configuraciones basadas en el notebook analisis_soiling.ipynb
 REFCELLS_REFERENCE_COLUMN = '1RC412(w.m-2)' # Columna de referencia para el cálculo de SR
 REFCELLS_SOILED_COLUMNS_TO_ANALYZE = ['1RC410(w.m-2)', '1RC411(w.m-2)'] # Columnas sucias a analizar

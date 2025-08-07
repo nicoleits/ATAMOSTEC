@@ -374,6 +374,14 @@ def analyze_ref_cells_data(raw_data_filepath: str) -> bool:
             sr_max_val
         )
         
+        # Generar gráfico de SR diario Q25 con tendencia para 1RC411
+        _generate_daily_q25_trend_plot(
+            df_daily_sr_q25,
+            '1RC411(w.m-2)',
+            sr_min_val,
+            sr_max_val
+        )
+        
         # --- Análisis de Días Nublados durante Mediodía Solar ---
         logger.info("Iniciando análisis de días nublados durante mediodía solar...")
         _analyze_cloudy_days_solar_noon(df_ref_cells, ref_col, valid_soiled_cols)
@@ -623,6 +631,61 @@ def _generate_first_3_months_weekly_plot(df_weekly_sr_q25: pd.DataFrame, cell_na
             plt.close(fig)
     else:
         logger.info(f"No hay datos válidos para graficar la celda {cell_name}.")
+
+def _generate_daily_q25_trend_plot(df_daily_sr_q25: pd.DataFrame, cell_name: str, sr_min_val: float, sr_max_val: float) -> None:
+    """
+    Genera un gráfico específico de SR diario Q25 para la celda 411 con línea de tendencia.
+    """
+    if cell_name not in df_daily_sr_q25.columns:
+        logger.warning(f"La celda {cell_name} no se encuentra en los datos diarios.")
+        return
+
+    if df_daily_sr_q25[cell_name].dropna().empty:
+        logger.warning(f"No hay datos para {cell_name} en los datos diarios Q25.")
+        return
+
+    # Crear el gráfico
+    fig, ax = plt.subplots(figsize=(12, 6))
+    serie = df_daily_sr_q25[cell_name].copy()
+
+    if settings.REFCELLS_ADJUST_TO_100_FLAG:
+        serie = _adjust_series_start_to_100(serie, f"{cell_name} Diario Q25")
+
+    # Plotear datos originales
+    serie.plot(ax=ax, style='o-', alpha=0.85, label=f'SR Photocells (Diario Q25)', linewidth=1)
+
+    # Calcular línea de tendencia
+    x = np.arange(len(serie))
+    y = serie.values
+    mask = ~np.isnan(y)
+    if np.sum(mask) > 1:  # Necesitamos al menos 2 puntos para una línea
+        slope, intercept, r_value, p_value, std_err = stats.linregress(x[mask], y[mask])
+        r2 = r_value ** 2
+        y_trend = slope * x + intercept
+        # Graficar la tendencia sobre las mismas fechas con el mismo color que la curva
+        ax.plot(serie.index, y_trend, '--', linewidth=2, alpha=0.7,
+                label=f'Tendencia: {slope:.3f}%/día, R²: {r2:.3f}', color=ax.lines[-1].get_color())
+
+    ax.set_ylabel(f'Soiling Ratio{" Ajustado" if settings.REFCELLS_ADJUST_TO_100_FLAG else ""} [%]')
+    ax.set_xlabel('Día')
+    ax.set_title(f'SR Diario Q25 con Tendencia - {cell_name}')
+    ax.grid(True, which='both', linestyle='--')
+    ax.legend(loc='best')
+    ax.set_ylim([90, 110])
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+    plt.xticks(rotation=45, ha='right')
+    plt.tight_layout()
+
+    if settings.SAVE_FIGURES:
+        safe_cell_name = re.sub(r'[^a-zA-Z0-9_]', '', cell_name)
+        filename = f'refcell_{safe_cell_name}_sr_diario_q25_tendencia.png'
+        save_plot_matplotlib(fig, filename, paths.REFCELLS_OUTPUT_SUBDIR_GRAPH)
+    if settings.SHOW_FIGURES:
+        plt.show()
+    elif settings.SAVE_FIGURES:
+        plt.close(fig)
+    if not settings.SHOW_FIGURES and not settings.SAVE_FIGURES:
+        plt.close(fig)
 
 def _analyze_cloudy_days_solar_noon(df_ref_cells: pd.DataFrame, ref_col: str, valid_soiled_cols: list) -> None:
     """

@@ -1,0 +1,10 @@
+[33m10042f0[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmaster[m[33m, [m[1;31morigin/master[m[33m)[m codigos funcionales para descarga de pvstand desde clickhouse y analisis
+[33m4c7a9a2[m Fix: Agregar manejo de errores para franja mediodía solar
+[33mf35692a[m Add: app.py principal para Streamlit Cloud
+[33m6d3c7eb[m Fix: Simplificar archivo de entrada v4 para Streamlit Cloud
+[33m2305d2c[m Fix: Mejorar manejo de dependencias para Streamlit Cloud
+[33m41cfcc5[m Dashboard Integrado v4: Agregar Soiling Kit con gráfico Q25 semanal y franjas horarias en DustIQ
+[33m92ab884[m Actualizar documentación y limpiar archivos obsoletos: README, requirements y estructura del proyecto
+[33mb5f8050[m Limpiar repositorio: eliminar dashboards obsoletos y archivos temporales
+[33m914036c[m Crear dashboard integrado v3: versión simplificada y robusta
+[33mb6bdb61[m Simplificar dashboard integrado v2: quitar pestaña de comparación

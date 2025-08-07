@@ -290,15 +290,15 @@ def create_consolidated_weekly_q25_plot():
                 series_norm = normalize_series_to_100(series, f"Soiling Kit {col}")
                 series_norm.plot(ax=ax, style='o-', color=colors['soiling_kit'], 
                                alpha=0.9, linewidth=2, markersize=6, 
-                               label='SoilRatio', marker='o')
+                               label='Soiling Kit', marker='o')
                 plotted_series.append('Soiling Kit - SR Raw Q25')
     
     # Graficar PVStand Semanal Q25 (ambas curvas)
     if not pvstand_data.empty:
         color_map = {'SR_PVStand_Semanal_Q25_Pmax': colors['pvstand_pmax'],
                      'SR_PVStand_Semanal_Q25_Isc': colors['pvstand_isc']}
-        label_map = {'SR_PVStand_Semanal_Q25_Pmax': 'IV Curve Tracer 1 Pmax',
-                     'SR_PVStand_Semanal_Q25_Isc': 'IV Curve Tracer 1 Isc'}
+        label_map = {'SR_PVStand_Semanal_Q25_Pmax': 'PVStand Pmax',
+                     'SR_PVStand_Semanal_Q25_Isc': 'PVStand Isc'}
         for col in pvstand_data.columns:
             series = pvstand_data[col].dropna()
             if not series.empty:
@@ -313,12 +313,12 @@ def create_consolidated_weekly_q25_plot():
         for i, col in enumerate(iv600_data.columns):
             series = iv600_data[col].dropna()
             if not series.empty:
-                series_norm = normalize_series_to_100(series, f"IV600 {col}")
+                series_norm = normalize_series_to_100(series, f"{col}")
                 color = colors['iv600_pmax'] if 'Pmax' in col or 'Pmp' in col else colors['iv600_isc']
                 series_norm.plot(ax=ax, style='o-', color=color, 
                                alpha=0.9, linewidth=2, markersize=6, 
-                               label=f'IV Curva Tracer 2 {col}', marker='o')
-                plotted_series.append(f'IV Curva Tracer 2 {col}')
+                               label=f'{col}', marker='o')
+                plotted_series.append(f'{col}')
     
     # Configurar el gráfico
     if plotted_series:
@@ -397,12 +397,12 @@ def create_synchronized_weekly_q25_plot():
         for col in soiling_kit_data.columns:
             series = soiling_kit_data[col].dropna()
             if not series.empty:
-                all_series['SoilRatio'] = series
+                all_series['Soiling Kit'] = series
     
     # PVStand Semanal Q25 (ambas curvas)
     if not pvstand_data.empty:
-        label_map = {'SR_PVStand_Semanal_Q25_Pmax': 'IV Curve Tracer 1 SRPmax',
-                     'SR_PVStand_Semanal_Q25_Isc': 'IV Curve Tracer 1 SRIsc'}
+        label_map = {'SR_PVStand_Semanal_Q25_Pmax': 'PVStand SRPmax',
+                     'SR_PVStand_Semanal_Q25_Isc': 'PVStand SRIsc'}
         for col in pvstand_data.columns:
             series = pvstand_data[col].dropna()
             if not series.empty:
@@ -493,7 +493,7 @@ def create_synchronized_weekly_q25_plot():
             color = colors['ref_cells']
         elif 'DustIQ' in name:
             color = colors['dustiq']
-        elif 'SoilRatio' in name:
+        elif 'Soiling Kit' in name:
             color = colors['soiling_kit']
         elif 'Tracer 1' in name and 'SRIsc' in name:
             color = colors['pvstand_isc']
