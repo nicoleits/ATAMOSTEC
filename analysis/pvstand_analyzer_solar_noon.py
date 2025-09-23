@@ -141,8 +141,7 @@ def analyze_pvstand_data_solar_noon(
         True si el análisis fue exitoso, False en caso contrario.
     """
     logger.info("=== INICIO DEL ANÁLISIS PVSTAND CON MEDIO DÍA SOLAR ===")
-    logger.info(f"Archivo de datos IV: {pv_iv_data_filepath}")
-    logger.info(f"Archivo de datos de temperatura: {temperature_data_filepath}")
+    logger.info(f"CSV de datos IV y temperatura: {pv_iv_data_filepath,temperature_data_filepath}")
     logger.info(f"Ventana de medio día solar: ±{solar_noon_window_hours} horas")
     logger.info(f"Coordenadas del sitio: Lat={settings.SITE_LATITUDE}°, Lon={settings.SITE_LONGITUDE}°")
     
@@ -784,15 +783,15 @@ def analyze_pvstand_data_solar_noon(
             if has_data_for_this_agg_plot:
                 # Título especial para el gráfico semanal normalizado
                 if filename_suffix == 'norm' and 'semanal' in plot_desc_agg_str.lower():
-                    current_plot_title = 'Soiling Ratio PVStand (Medio Día Solar)'
+                    current_plot_title = 'Soiling Ratio PVStand (Solar Noon)'
                 else:
-                    current_plot_title = f'{title_prefix} ({plot_desc_agg_str}) - Medio Día Solar'
+                    current_plot_title = f'{title_prefix} ({plot_desc_agg_str}) - Solar Noon'
 
-                ax.set_title(current_plot_title, fontsize=20)
-                ax.set_ylabel('Soiling Ratio Normalizado [%]' if is_normalized_section_flag_param and normalize_sr_flag else 'Soiling Ratio [%]', fontsize=18)
-                ax.set_xlabel('Fecha', fontsize=18)
+                ax.set_title(current_plot_title, fontsize=18)
+                ax.set_ylabel('Soiling Ratio Normalizado [%]' if is_normalized_section_flag_param and normalize_sr_flag else 'Soiling Ratio [%]', fontsize=16)
+                ax.set_xlabel('Date', fontsize=16)
                 ax.grid(True, which='both', linestyle='--', linewidth=0.5)
-                ax.legend(loc='best', fontsize=14)
+                ax.legend(loc='best', fontsize=12)
                 ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
                 ax.tick_params(axis='both', labelsize=14)
                 plt.xticks(rotation=30, ha='right', fontsize=14)
@@ -817,17 +816,17 @@ def analyze_pvstand_data_solar_noon(
                 if 'fig' in locals() and fig is not None and plt.fignum_exists(fig.number): plt.close(fig)
 
     _plot_sr_section_internal(df_sr_to_save_main, 
-                     f"PVStand SRs ({'Normalizado' if normalize_sr_flag else 'Absoluto'}) - Medio Día Solar", 
+                     f"PVStand SRs ({'Normalized' if normalize_sr_flag else 'Absolute'}) - Solar Noon", 
                      f"{'norm' if normalize_sr_flag else 'abs'}", 
                      is_normalized_section_flag_param=True) 
 
     _plot_sr_section_internal(df_sr_to_save_no_norm, 
-                     "PVStand SRs (No Normalizado, Con Offset Pmax) - Medio Día Solar", 
+                     "PVStand SRs (Not Normalized, With Pmax Offset) - Solar Noon", 
                      "no_norm_with_offset", 
                      is_normalized_section_flag_param=False)
 
     _plot_sr_section_internal(df_sr_to_save_raw, 
-                     "PVStand SRs (Raw, Sin Offset) - Medio Día Solar", 
+                     "PVStand SRs (Raw, No Offset) - Solar Noon", 
                      "raw_no_offset", 
                      is_normalized_section_flag_param=False)
     
@@ -846,7 +845,17 @@ def analyze_pvstand_data_solar_noon(
         else:
             logger.warning(f"No se encontraron columnas de corrientes: {col_imax_soiled}, {col_imax_reference}")
             logger.info(f"Columnas disponibles: {list(df_merged_for_corr.columns)}")
+
+        # --- Gráficos Adicionales con Diferencias ---
+        # Gráfico de Potencias con Diferencias
+        _plot_daily_power_averages_with_difference_solar_noon(df_merged_for_corr, col_pmax_soiled, col_pmax_reference, 
+                                                            graph_base_plus_subdir, save_figures_setting, show_figures_setting)
         
+        # Gráfico de Corrientes con Diferencias
+        if col_imax_soiled in df_merged_for_corr.columns and col_imax_reference in df_merged_for_corr.columns:
+            _plot_daily_isc_averages_with_difference_solar_noon(df_merged_for_corr, col_imax_soiled, col_imax_reference, 
+                                                              graph_base_plus_subdir, save_figures_setting, show_figures_setting)
+                                                              
         # --- Análisis Estadístico de Potencias en Mediodía Solar ---
         power_stats_df, power_monthly_stats, power_weekly_stats = _generate_power_statistical_analysis_solar_noon(
             df_merged_for_corr, col_pmax_soiled, col_pmax_reference,
@@ -1148,16 +1157,16 @@ def _plot_daily_isc_averages_solar_noon(df_merged, col_imax_soiled, col_imax_ref
         # Plotear las series
         ax.plot(daily_isc_soiled.index, daily_isc_soiled.values, 
                '-o', color='#e74c3c', alpha=0.8, markersize=4, 
-               label='Módulo Sucio (Isc)', linewidth=2)
+               label='Soiled Module (Isc)', linewidth=2)
         
         ax.plot(daily_isc_reference.index, daily_isc_reference.values, 
                '-o', color='#3498db', alpha=0.8, markersize=4, 
-               label='Módulo Referencia (Isc)', linewidth=2)
+               label='Reference Module (Isc)', linewidth=2)
         
         # Configurar el gráfico
-        ax.set_title('Corrientes de Cortocircuito Diarias Promedio - Mediodía Solar', fontsize=20)
-        ax.set_ylabel('Corriente de Cortocircuito Promedio [A]', fontsize=18)
-        ax.set_xlabel('Fecha', fontsize=18)
+        ax.set_title('Daily Average Short-Circuit Current - Solar Noon', fontsize=18)
+        ax.set_ylabel('Average Short-Circuit Current [A]', fontsize=18)
+        ax.set_xlabel('Date', fontsize=18)
         ax.grid(True, which='both', linestyle='--', linewidth=0.5, alpha=0.7)
         ax.legend(loc='best', fontsize=14)
         
@@ -1178,14 +1187,10 @@ def _plot_daily_isc_averages_solar_noon(df_merged, col_imax_soiled, col_imax_ref
         ratio_mean = mean_soiled / mean_reference if mean_reference > 0 else 0
         
         # Agregar texto con estadísticas
-        stats_text = f'Promedio Sucio: {mean_soiled:.3f} A\n'
-        stats_text += f'Promedio Referencia: {mean_reference:.3f} A\n'
-        stats_text += f'Ratio promedio: {ratio_mean:.3f} ({ratio_mean*100:.1f}%)'
-        
-        ax.text(0.02, 0.98, stats_text, transform=ax.transAxes, 
-               verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8),
-               fontsize=12)
-        
+        stats_text = f'Average Soiled: {mean_soiled:.3f} A\n'
+        stats_text += f'Average Reference: {mean_reference:.3f} A\n'
+        stats_text += f'Average ratio: {ratio_mean:.3f} ({ratio_mean*100:.1f}%)'
+            
         # Guardar y/o mostrar
         plot_filename = "pvstand_corrientes_cortocircuito_diarias_promedio_solar_noon.png"
         
@@ -1203,6 +1208,114 @@ def _plot_daily_isc_averages_solar_noon(df_merged, col_imax_soiled, col_imax_ref
         
     except Exception as e:
         logger.error(f"Error generando gráfico de corrientes diarias: {e}", exc_info=True)
+
+def _plot_daily_isc_averages_with_difference_solar_noon(df_merged, col_imax_soiled, col_imax_reference, 
+                                                       output_dir, save_figures, show_figures):
+    """
+    Genera un gráfico de los promedios diarios de corrientes de cortocircuito durante el mediodía solar
+    con un segundo eje Y que muestra la diferencia entre módulo referencia y sucio.
+    
+    Args:
+        df_merged: DataFrame con datos de corrientes filtrados por mediodía solar
+        col_imax_soiled: Nombre de la columna de corriente del módulo sucio
+        col_imax_reference: Nombre de la columna de corriente del módulo de referencia
+        output_dir: Directorio de salida para los gráficos
+        save_figures: Si guardar las figuras
+        show_figures: Si mostrar las figuras
+    """
+    logger.info("Generando gráfico de corrientes diarias promedio con diferencias en mediodía solar...")
+    
+    try:
+        # Calcular promedios diarios
+        daily_isc_soiled = df_merged[col_imax_soiled].resample('D').mean().dropna()
+        daily_isc_reference = df_merged[col_imax_reference].resample('D').mean().dropna()
+        
+        if daily_isc_soiled.empty or daily_isc_reference.empty:
+            logger.warning("No hay datos suficientes para generar gráfico de corrientes diarias con diferencias.")
+            return
+        
+        # Calcular diferencia (referencia - sucio)
+        daily_isc_difference = daily_isc_reference - daily_isc_soiled
+        
+        # Crear el gráfico con doble eje Y
+        fig, ax1 = plt.subplots(figsize=(15, 8))
+        ax2 = ax1.twinx()
+        
+        # Plotear las series en el eje izquierdo (corrientes)
+        line1 = ax1.plot(daily_isc_soiled.index, daily_isc_soiled.values, 
+                        '-o', color='#e74c3c', alpha=0.8, markersize=4, 
+                        label='Soiled Module (Isc)', linewidth=2)
+        
+        line2 = ax1.plot(daily_isc_reference.index, daily_isc_reference.values, 
+                        '-o', color='#3498db', alpha=0.8, markersize=4, 
+                        label='Reference Module (Isc)', linewidth=2)
+        
+        # Plotear la diferencia en el eje derecho
+        line3 = ax2.plot(daily_isc_difference.index, daily_isc_difference.values, 
+                        '-s', color='#9b59b6', alpha=0.7, markersize=3, 
+                        label='Difference (Ref - Soiled)', linewidth=1.5)
+        
+        # Configurar el eje izquierdo (corrientes)
+        ax1.set_xlabel('Date', fontsize=18)
+        ax1.set_ylabel('Average Short-Circuit Current [A]', fontsize=18, color='black')
+        ax1.tick_params(axis='y', labelcolor='black', labelsize=14)
+        ax1.tick_params(axis='x', labelsize=14)
+        ax1.grid(True, which='both', linestyle='--', linewidth=0.5, alpha=0.7)
+        
+        # Configurar el eje derecho (diferencias)
+        ax2.set_ylabel('Current Difference [A]', fontsize=18, color='#9b59b6')
+        ax2.tick_params(axis='y', labelcolor='#9b59b6', labelsize=14)
+        
+        # Configurar límites del eje Y izquierdo
+        current_ylim = ax1.get_ylim()
+        ax1.set_ylim(bottom=0, top=current_ylim[1] * 1.05)
+        
+        # Título y leyenda combinada
+        ax1.set_title('Daily Average Short-Circuit Current with Differences - Solar Noon', fontsize=20)
+        
+        # Combinar leyendas de ambos ejes
+        lines = line1 + line2 + line3
+        labels = [l.get_label() for l in lines]
+        ax1.legend(lines, labels, loc='best', fontsize=14)
+        
+        # Formatear fechas en el eje X
+        ax1.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+        plt.xticks(rotation=30, ha='right', fontsize=14)
+        plt.tight_layout()
+        
+        # Estadísticas rápidas para mostrar en el gráfico
+        mean_soiled = daily_isc_soiled.mean()
+        mean_reference = daily_isc_reference.mean()
+        mean_difference = daily_isc_difference.mean()
+        ratio_mean = mean_soiled / mean_reference if mean_reference > 0 else 0
+        
+        # Agregar texto con estadísticas
+        stats_text = f'Average Soiled: {mean_soiled:.3f} A\n'
+        stats_text += f'Average Reference: {mean_reference:.3f} A\n'
+        stats_text += f'Average Difference: {mean_difference:.3f} A\n'
+        stats_text += f'Average ratio: {ratio_mean:.3f} ({ratio_mean*100:.1f}%)'
+        
+        ax1.text(0.02, 0.98, stats_text, transform=ax1.transAxes, 
+                verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8),
+                fontsize=12)
+        
+        # Guardar y/o mostrar
+        plot_filename = "pvstand_corrientes_cortocircuito_diarias_promedio_con_diferencias_solar_noon.png"
+        
+        if save_figures:
+            save_plot_matplotlib(fig, plot_filename, output_dir)
+            logger.info(f"Gráfico de corrientes diarias con diferencias guardado en: {os.path.join(output_dir, plot_filename)}")
+        
+        if show_figures:
+            plt.show(block=True)
+            logger.info("Gráfico de corrientes diarias con diferencias mostrado")
+        else:
+            plt.close(fig)
+            
+        logger.info("Gráfico de corrientes diarias promedio con diferencias generado exitosamente.")
+        
+    except Exception as e:
+        logger.error(f"Error generando gráfico de corrientes diarias con diferencias: {e}", exc_info=True)
 
 def _plot_daily_sr_q25_no_offset_solar_noon(df_sr_raw_no_offset, output_dir, save_figures, show_figures):
     """
@@ -1244,10 +1357,10 @@ def _plot_daily_sr_q25_no_offset_solar_noon(df_sr_raw_no_offset, output_dir, sav
         
         # Etiquetas más legibles
         labels = {
-            'SR_Isc_Uncorrected_Raw_NoOffset': 'SR Isc (Sin corrección)',
-            'SR_Pmax_Uncorrected_Raw_NoOffset': 'SR Pmax (Sin corrección)',
-            'SR_Isc_Corrected_Raw_NoOffset': 'SR Isc (Corregido temp.)',
-            'SR_Pmax_Corrected_Raw_NoOffset': 'SR Pmax (Corregido temp.)'
+            'SR_Isc_Uncorrected_Raw_NoOffset': 'SR Isc (Uncorrected)',
+            'SR_Pmax_Uncorrected_Raw_NoOffset': 'SR Pmax (Uncorrected)',
+            'SR_Isc_Corrected_Raw_NoOffset': 'SR Isc (Temp. corrected)',
+            'SR_Pmax_Corrected_Raw_NoOffset': 'SR Pmax (Temp. corrected)'
         }
         
         has_data = False
@@ -1286,10 +1399,10 @@ def _plot_daily_sr_q25_no_offset_solar_noon(df_sr_raw_no_offset, output_dir, sav
             return
         
         # Configurar el gráfico
-        ax.set_title('Soiling Ratios Diarios - Mediodía Solar', 
-                    fontsize=20, fontweight='bold', pad=20) #(Quintil 25%, Sin Offset)
-        ax.set_ylabel('Soiling Ratio [%]', fontsize=18, fontweight='bold')
-        ax.set_xlabel('Fecha', fontsize=18, fontweight='bold')
+        ax.set_title('Daily Soiling Ratios - Solar Noon', 
+                    fontsize=18, pad=10) #(25th Percentile, No Offset)
+        ax.set_ylabel('Soiling Ratio [%]', fontsize=18)
+        ax.set_xlabel('Date', fontsize=18)
         ax.grid(True, which='both', linestyle='--', linewidth=0.5, alpha=0.7)
         ax.legend(loc='best', fontsize=14)
         
@@ -1324,32 +1437,9 @@ def _plot_daily_sr_q25_no_offset_solar_noon(df_sr_raw_no_offset, output_dir, sav
         plt.tight_layout()
         
         # Agregar línea de referencia en 100%
-        ax.axhline(y=100, color='gray', linestyle=':', alpha=0.7, linewidth=1, label='Referencia (100%)')
+        ax.axhline(y=100, color='gray', linestyle=':', alpha=0.7, linewidth=1)
         
-        # Estadísticas rápidas para mostrar en el gráfico
-        if len(available_columns) > 0:
-            # Tomar la primera serie disponible para estadísticas generales
-            main_series = df_sr_raw_no_offset[available_columns[0]].dropna()
-            if not main_series.empty:
-                # Aplicar filtro para estadísticas
-                main_series_filtered = main_series[main_series >= 80.0]
-                if not main_series_filtered.empty:
-                    daily_stats = main_series_filtered.resample('D').agg(['mean', 'min', 'max', lambda x: x.quantile(0.25)]).dropna()
-                    
-                    if not daily_stats.empty:
-                        mean_q25 = daily_stats.iloc[:, 3].mean()  # Quintil 0.25 promedio
-                        min_q25 = daily_stats.iloc[:, 3].min()   # Mínimo del quintil 0.25
-                        max_q25 = daily_stats.iloc[:, 3].max()   # Máximo del quintil 0.25
-                        
-                        # Agregar texto con estadísticas
-                        stats_text = f'Estadísticas Q25 (Serie principal, SR≥80%):\n'
-                        stats_text += f'Promedio: {mean_q25:.2f}%\n'
-                        stats_text += f'Mínimo: {min_q25:.2f}%\n'
-                        stats_text += f'Máximo: {max_q25:.2f}%'
-                        
-                        ax.text(0.02, 0.02, stats_text, transform=ax.transAxes, 
-                               verticalalignment='bottom', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8),
-                               fontsize=12)
+        # Estadísticas removidas para evitar leyendas superpuestas
         
         # Guardar y/o mostrar
         plot_filename = "pvstand_sr_diarios_q25_sin_offset_solar_noon.png"
@@ -1409,10 +1499,10 @@ def _plot_weekly_sr_normalized_with_trend_solar_noon(df_sr_raw_no_offset, output
         
         # Etiquetas más legibles
         labels = {
-            'SR_Isc_Uncorrected_Raw_NoOffset': 'SR Isc (Sin corrección)',
-            'SR_Pmax_Uncorrected_Raw_NoOffset': 'SR Pmax (Sin corrección)',
-            'SR_Isc_Corrected_Raw_NoOffset': 'SR Isc (Corregido temp.)',
-            'SR_Pmax_Corrected_Raw_NoOffset': 'SR Pmax (Corregido temp.)'
+            'SR_Isc_Uncorrected_Raw_NoOffset': 'SR Isc (Uncorrected)',
+            'SR_Pmax_Uncorrected_Raw_NoOffset': 'SR Pmax (Uncorrected)',
+            'SR_Isc_Corrected_Raw_NoOffset': 'SR Isc (Temp. corrected)',
+            'SR_Pmax_Corrected_Raw_NoOffset': 'SR Pmax (Temp. corrected)'
         }
         
         has_data = False
@@ -1474,7 +1564,7 @@ def _plot_weekly_sr_normalized_with_trend_solar_noon(df_sr_raw_no_offset, output
                 # Plotear línea de tendencia
                 ax.plot(weekly_normalized.index, y_pred.flatten(), 
                        '--', color=color, alpha=0.6, linewidth=2,
-                       label=f'Tendencia {label}: {pendiente_semanal:.3f}%/sem, R²={r2:.3f}')
+                       label=f'Trend {label}: {pendiente_semanal:.3f}%/week, R²={r2:.3f}')
             
             has_data = True
         
@@ -1484,10 +1574,10 @@ def _plot_weekly_sr_normalized_with_trend_solar_noon(df_sr_raw_no_offset, output
             return
         
         # Configurar el gráfico
-        ax.set_title('Soiling Ratios Semanales Normalizados (Q25) - Mediodía Solar', 
-                    fontsize=20, fontweight='bold', pad=20)
-        ax.set_ylabel('Soiling Ratio Normalizado [%]', fontsize=18, fontweight='bold')
-        ax.set_xlabel('Fecha', fontsize=18, fontweight='bold')
+        ax.set_title('Weekly Normalized Soiling Ratios (Q25) - Solar Noon', 
+                    fontsize=18, pad=10)
+        ax.set_ylabel('Normalized Soiling Ratio [%]', fontsize=18)
+        ax.set_xlabel('Date', fontsize=18)
         ax.grid(True, which='both', linestyle='--', linewidth=0.5, alpha=0.7)
         ax.legend(loc='best', fontsize=12)
         
@@ -1563,10 +1653,10 @@ def _plot_weekly_sr_normalized_trend_no_first_2weeks_solar_noon(df_sr_raw_no_off
         
         # Etiquetas más legibles
         labels = {
-            'SR_Isc_Uncorrected_Raw_NoOffset': 'SR Isc (Sin corrección)',
-            'SR_Pmax_Uncorrected_Raw_NoOffset': 'SR Pmax (Sin corrección)',
-            'SR_Isc_Corrected_Raw_NoOffset': 'SR Isc (Corregido temp.)',
-            'SR_Pmax_Corrected_Raw_NoOffset': 'SR Pmax (Corregido temp.)'
+            'SR_Isc_Uncorrected_Raw_NoOffset': 'SR Isc (Uncorrected)',
+            'SR_Pmax_Uncorrected_Raw_NoOffset': 'SR Pmax (Uncorrected)',
+            'SR_Isc_Corrected_Raw_NoOffset': 'SR Isc (Temp. corrected)',
+            'SR_Pmax_Corrected_Raw_NoOffset': 'SR Pmax (Temp. corrected)'
         }
         
         has_data = False
@@ -1636,7 +1726,7 @@ def _plot_weekly_sr_normalized_trend_no_first_2weeks_solar_noon(df_sr_raw_no_off
                 # Plotear línea de tendencia
                 ax.plot(weekly_normalized.index, y_pred.flatten(), 
                        '--', color=color, alpha=0.6, linewidth=2,
-                       label=f'Tendencia {label}: {pendiente_semanal:.3f}%/sem, R²={r2:.3f}')
+                       label=f'Trend {label}: {pendiente_semanal:.3f}%/week, R²={r2:.3f}')
             
             has_data = True
         
@@ -1646,10 +1736,10 @@ def _plot_weekly_sr_normalized_trend_no_first_2weeks_solar_noon(df_sr_raw_no_off
             return
         
         # Configurar el gráfico
-        ax.set_title('Soiling Ratios Semanales Normalizados Q25 - Mediodía Solar', 
-                    fontsize=20, fontweight='bold', pad=20) # sin 2 primeras semanas    
-        ax.set_ylabel('Soiling Ratio Normalizado [%]', fontsize=18, fontweight='bold')
-        ax.set_xlabel('Fecha', fontsize=18, fontweight='bold')
+        ax.set_title('Weekly Normalized Soiling Ratios Q25 - Solar Noon', 
+                    fontsize=18, pad=10) # excluding first 2 weeks    
+        ax.set_ylabel('Normalized Soiling Ratio [%]', fontsize=18)
+        ax.set_xlabel('Date', fontsize=18)
         ax.grid(True, which='both', linestyle='--', linewidth=0.5, alpha=0.7)
         ax.legend(loc='best', fontsize=12)
         
@@ -1714,16 +1804,16 @@ def _plot_daily_power_averages_solar_noon(df_merged, col_pmax_soiled, col_pmax_r
         # Plotear las series
         ax.plot(daily_power_soiled.index, daily_power_soiled.values, 
                '-o', color='#ff7f0e', alpha=0.8, markersize=4, 
-               label='Módulo Sucio', linewidth=2)
+               label='Soiled Module', linewidth=2)
         
         ax.plot(daily_power_reference.index, daily_power_reference.values, 
                '-o', color='#1f77b4', alpha=0.8, markersize=4, 
-               label='Módulo Referencia', linewidth=2)
+               label='Reference Module', linewidth=2)
         
         # Configurar el gráfico
-        ax.set_title('Potencias Diarias Promedio - Mediodía Solar', fontsize=20)
-        ax.set_ylabel('Potencia Promedio [W]', fontsize=18)
-        ax.set_xlabel('Fecha', fontsize=18)
+        ax.set_title('Daily Average Power - Solar Noon', fontsize=18)
+        ax.set_ylabel('Average Power [W]', fontsize=18)
+        ax.set_xlabel('Date', fontsize=18)
         ax.grid(True, which='both', linestyle='--', linewidth=0.5, alpha=0.7)
         ax.legend(loc='best', fontsize=14)
         
@@ -1756,6 +1846,114 @@ def _plot_daily_power_averages_solar_noon(df_merged, col_pmax_soiled, col_pmax_r
     except Exception as e:
         logger.error(f"Error generando gráfico de potencias diarias: {e}", exc_info=True)
 
+def _plot_daily_power_averages_with_difference_solar_noon(df_merged, col_pmax_soiled, col_pmax_reference, 
+                                                         output_dir, save_figures, show_figures):
+    """
+    Genera un gráfico de los promedios diarios de potencias durante el mediodía solar
+    con un segundo eje Y que muestra la diferencia entre módulo referencia y sucio.
+    
+    Args:
+        df_merged: DataFrame con datos de potencias filtrados por mediodía solar
+        col_pmax_soiled: Nombre de la columna de potencia del módulo sucio
+        col_pmax_reference: Nombre de la columna de potencia del módulo de referencia
+        output_dir: Directorio de salida para los gráficos
+        save_figures: Si guardar las figuras
+        show_figures: Si mostrar las figuras
+    """
+    logger.info("Generando gráfico de potencias diarias promedio con diferencias en mediodía solar...")
+    
+    try:
+        # Calcular promedios diarios
+        daily_power_soiled = df_merged[col_pmax_soiled].resample('D').mean().dropna()
+        daily_power_reference = df_merged[col_pmax_reference].resample('D').mean().dropna()
+        
+        if daily_power_soiled.empty or daily_power_reference.empty:
+            logger.warning("No hay datos suficientes para generar gráfico de potencias diarias con diferencias.")
+            return
+        
+        # Calcular diferencia (referencia - sucio)
+        daily_power_difference = daily_power_reference - daily_power_soiled
+        
+        # Crear el gráfico con doble eje Y
+        fig, ax1 = plt.subplots(figsize=(15, 8))
+        ax2 = ax1.twinx()
+        
+        # Plotear las series en el eje izquierdo (potencias)
+        line1 = ax1.plot(daily_power_soiled.index, daily_power_soiled.values, 
+                        '-o', color='#ff7f0e', alpha=0.8, markersize=4, 
+                        label='Soiled Module', linewidth=2)
+        
+        line2 = ax1.plot(daily_power_reference.index, daily_power_reference.values, 
+                        '-o', color='#1f77b4', alpha=0.8, markersize=4, 
+                        label='Reference Module', linewidth=2)
+        
+        # Plotear la diferencia en el eje derecho
+        line3 = ax2.plot(daily_power_difference.index, daily_power_difference.values, 
+                        '-s', color='#2ca02c', alpha=0.7, markersize=3, 
+                        label='Difference (Ref - Soiled)', linewidth=1.5)
+        
+        # Configurar el eje izquierdo (potencias)
+        ax1.set_xlabel('Date', fontsize=18)
+        ax1.set_ylabel('Average Power [W]', fontsize=18, color='black')
+        ax1.tick_params(axis='y', labelcolor='black', labelsize=14)
+        ax1.tick_params(axis='x', labelsize=14)
+        ax1.grid(True, which='both', linestyle='--', linewidth=0.5, alpha=0.7)
+        
+        # Configurar el eje derecho (diferencias)
+        ax2.set_ylabel('Power Difference [W]', fontsize=18, color='#2ca02c')
+        ax2.tick_params(axis='y', labelcolor='#2ca02c', labelsize=14)
+        
+        # Configurar límites del eje Y izquierdo
+        current_ylim = ax1.get_ylim()
+        ax1.set_ylim(bottom=100, top=current_ylim[1])
+        
+        # Título y leyenda combinada
+        ax1.set_title('Daily Average Power with Differences - Solar Noon', fontsize=20)
+        
+        # Combinar leyendas de ambos ejes
+        lines = line1 + line2 + line3
+        labels = [l.get_label() for l in lines]
+        ax1.legend(lines, labels, loc='best', fontsize=14)
+        
+        # Formatear fechas en el eje X
+        ax1.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+        plt.xticks(rotation=30, ha='right', fontsize=14)
+        plt.tight_layout()
+        
+        # Estadísticas rápidas para mostrar en el gráfico
+        mean_soiled = daily_power_soiled.mean()
+        mean_reference = daily_power_reference.mean()
+        mean_difference = daily_power_difference.mean()
+        ratio_mean = mean_soiled / mean_reference if mean_reference > 0 else 0
+        
+        # Agregar texto con estadísticas
+        stats_text = f'Average Soiled: {mean_soiled:.1f} W\n'
+        stats_text += f'Average Reference: {mean_reference:.1f} W\n'
+        stats_text += f'Average Difference: {mean_difference:.1f} W\n'
+        stats_text += f'Average ratio: {ratio_mean:.3f} ({ratio_mean*100:.1f}%)'
+        
+        ax1.text(0.02, 0.98, stats_text, transform=ax1.transAxes, 
+                verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8),
+                fontsize=12)
+        
+        # Guardar y/o mostrar
+        plot_filename = "pvstand_potencias_diarias_promedio_con_diferencias_solar_noon.png"
+        
+        if save_figures:
+            save_plot_matplotlib(fig, plot_filename, output_dir)
+            logger.info(f"Gráfico de potencias diarias con diferencias guardado en: {os.path.join(output_dir, plot_filename)}")
+        
+        if show_figures:
+            plt.show(block=True)
+            logger.info("Gráfico de potencias diarias con diferencias mostrado")
+        else:
+            plt.close(fig)
+            
+        logger.info("Gráfico de potencias diarias promedio con diferencias generado exitosamente.")
+        
+    except Exception as e:
+        logger.error(f"Error generando gráfico de potencias diarias con diferencias: {e}", exc_info=True)
+        
 def _generate_power_statistical_analysis_solar_noon(df_merged, col_pmax_soiled, col_pmax_reference,
                                                   output_csv_dir, output_graph_dir, save_figures, show_figures):
     """
@@ -1883,30 +2081,30 @@ def _generate_power_statistical_analysis_solar_noon(df_merged, col_pmax_soiled, 
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
         
         # Histograma módulo sucio
-        ax1.hist(power_soiled, bins=50, alpha=0.7, color='#ff7f0e', density=True, label='Módulo Sucio')
+        ax1.hist(power_soiled, bins=50, alpha=0.7, color='#ff7f0e', density=True, label='Soiled Module')
         ax1.axvline(power_soiled.mean(), color='#ff7f0e', linestyle='--', linewidth=2, 
-                   label=f'Media: {power_soiled.mean():.1f}W')
+                   label=f'Mean: {power_soiled.mean():.1f}W')
         ax1.axvline(power_soiled.median(), color='#ff7f0e', linestyle=':', linewidth=2, 
-                   label=f'Mediana: {power_soiled.median():.1f}W')
-        ax1.set_title('Distribución - Módulo Sucio', fontsize=14)
-        ax1.set_xlabel('Potencia [W]', fontsize=12)
-        ax1.set_ylabel('Densidad', fontsize=12)
+                   label=f'Median: {power_soiled.median():.1f}W')
+        ax1.set_title('Distribution - Soiled Module', fontsize=14)
+        ax1.set_xlabel('Power [W]', fontsize=12)
+        ax1.set_ylabel('Density', fontsize=12)
         ax1.legend()
         ax1.grid(True, alpha=0.3)
         
         # Histograma módulo referencia
-        ax2.hist(power_reference, bins=50, alpha=0.7, color='#1f77b4', density=True, label='Módulo Referencia')
+        ax2.hist(power_reference, bins=50, alpha=0.7, color='#1f77b4', density=True, label='Reference Module')
         ax2.axvline(power_reference.mean(), color='#1f77b4', linestyle='--', linewidth=2, 
-                   label=f'Media: {power_reference.mean():.1f}W')
+                   label=f'Mean: {power_reference.mean():.1f}W')
         ax2.axvline(power_reference.median(), color='#1f77b4', linestyle=':', linewidth=2, 
-                   label=f'Mediana: {power_reference.median():.1f}W')
-        ax2.set_title('Distribución - Módulo Referencia', fontsize=14)
-        ax2.set_xlabel('Potencia [W]', fontsize=12)
-        ax2.set_ylabel('Densidad', fontsize=12)
+                   label=f'Median: {power_reference.median():.1f}W')
+        ax2.set_title('Distribution - Reference Module', fontsize=14)
+        ax2.set_xlabel('Power [W]', fontsize=12)
+        ax2.set_ylabel('Density', fontsize=12)
         ax2.legend()
         ax2.grid(True, alpha=0.3)
         
-        plt.suptitle('Distribuciones de Potencia - Mediodía Solar', fontsize=16)
+        plt.suptitle('Power Distributions - Solar Noon', fontsize=16)
         plt.tight_layout()
         
         if save_figures:
@@ -1935,17 +2133,17 @@ def _generate_power_statistical_analysis_solar_noon(df_merged, col_pmax_soiled, 
             plt.setp(bp[element], color='black')
         plt.setp(bp['means'], marker='D', markerfacecolor='red', markeredgecolor='red', markersize=6)
         
-        ax.set_title('Comparación Estadística de Potencias - Mediodía Solar', fontsize=16)
-        ax.set_ylabel('Potencia [W]', fontsize=14)
+        ax.set_title('Statistical Power Comparison - Solar Noon', fontsize=16)
+        ax.set_ylabel('Power [W]', fontsize=14)
         ax.grid(True, alpha=0.3)
         ax.set_ylim(bottom=100)
         
         # Agregar estadísticas como texto
-        stats_text = f"""Estadísticas Comparativas:
-Media Sucio: {power_soiled.mean():.1f}W
-Media Referencia: {power_reference.mean():.1f}W
-Diferencia Media: {(power_soiled.mean() - power_reference.mean()):.1f}W
-SR Promedio: {(power_soiled.mean() / power_reference.mean() * 100):.1f}%
+        stats_text = f"""Comparative Statistics:
+Mean Soiled: {power_soiled.mean():.1f}W
+Mean Reference: {power_reference.mean():.1f}W
+Mean Difference: {(power_soiled.mean() - power_reference.mean()):.1f}W
+Average SR: {(power_soiled.mean() / power_reference.mean() * 100):.1f}%
 P-value (t-test): {p_value:.4f}"""
         
         ax.text(0.02, 0.98, stats_text, transform=ax.transAxes, fontsize=10,
@@ -1986,11 +2184,11 @@ P-value (t-test): {p_value:.4f}"""
             # Potencias promedio mensuales
             months_str = [str(m) for m in monthly_stats.index]
             ax1.plot(months_str, monthly_stats['Sucio_Mean'], '-o', color='#ff7f0e', 
-                    label='Módulo Sucio', linewidth=2, markersize=6)
+                    label='Soiled Module', linewidth=2, markersize=6)
             ax1.plot(months_str, monthly_stats['Ref_Mean'], '-o', color='#1f77b4', 
-                    label='Módulo Referencia', linewidth=2, markersize=6)
-            ax1.set_title('Potencias Promedio Mensuales - Mediodía Solar', fontsize=14)
-            ax1.set_ylabel('Potencia Promedio [W]', fontsize=12)
+                    label='Reference Module', linewidth=2, markersize=6)
+            ax1.set_title('Monthly Average Power - Solar Noon', fontsize=14)
+            ax1.set_ylabel('Average Power [W]', fontsize=12)
             ax1.legend()
             ax1.grid(True, alpha=0.3)
             ax1.set_ylim(bottom=100)
@@ -1998,8 +2196,8 @@ P-value (t-test): {p_value:.4f}"""
             # SR promedio mensual
             ax2.plot(months_str, monthly_stats['SR_Mean_Percent'], '-o', color='#2ca02c', 
                     linewidth=2, markersize=6)
-            ax2.set_title('Soiling Ratio Promedio Mensual', fontsize=14)
-            ax2.set_xlabel('Mes', fontsize=12)
+            ax2.set_title('Monthly Average Soiling Ratio', fontsize=14)
+            ax2.set_xlabel('Month', fontsize=12)
             ax2.set_ylabel('SR [%]', fontsize=12)
             ax2.grid(True, alpha=0.3)
             
@@ -2097,12 +2295,12 @@ def _plot_validity_statistics_solar_noon(validez_data, output_dir, save_figures,
                              c=color, s=50, alpha=0.8, edgecolors='black', linewidth=0.5)
         
         # Configurar gráfico
-        ax.set_title('Evolución Temporal de Representatividad de Resamples Semanales - Mediodía Solar', 
+        ax.set_title('Temporal Evolution of Weekly Resample Representativeness - Solar Noon', 
                     fontsize=16, pad=20)
-        ax.set_xlabel('Fecha', fontsize=14)
-        ax.set_ylabel('Nivel de Representatividad', fontsize=14)
+        ax.set_xlabel('Date', fontsize=14)
+        ax.set_ylabel('Representativeness Level', fontsize=14)
         ax.set_yticks([1, 2, 3, 4])
-        ax.set_yticklabels(['Limitada', 'Aceptable', 'Buena', 'Excelente'])
+        ax.set_yticklabels(['Limited', 'Acceptable', 'Good', 'Excellent'])
         ax.grid(True, alpha=0.3)
         ax.legend(loc='best', title='Series')
         
@@ -2138,10 +2336,10 @@ def _plot_validity_statistics_solar_noon(validez_data, output_dir, save_figures,
         repr_counts.plot(kind='bar', stacked=True, ax=ax, 
                         color=[colors_repr.get(col, 'gray') for col in repr_counts.columns])
         
-        ax.set_title('Distribución de Representatividad por Serie - Mediodía Solar', fontsize=16, pad=20)
-        ax.set_xlabel('Serie', fontsize=14)
-        ax.set_ylabel('Número de Semanas', fontsize=14)
-        ax.legend(title='Representatividad', bbox_to_anchor=(1.05, 1), loc='upper left')
+        ax.set_title('Representativeness Distribution by Series - Solar Noon', fontsize=16, pad=20)
+        ax.set_xlabel('Series', fontsize=14)
+        ax.set_ylabel('Number of Weeks', fontsize=14)
+        ax.legend(title='Representativeness', bbox_to_anchor=(1.05, 1), loc='upper left')
         plt.xticks(rotation=45)
         plt.tight_layout()
         
@@ -2165,33 +2363,33 @@ def _plot_validity_statistics_solar_noon(validez_data, output_dir, save_figures,
         
         # Gráfico 1: Cobertura de días
         metricas_promedio['Cobertura_Dias_Pct'].plot(kind='bar', ax=ax1, color='#1f77b4')
-        ax1.set_title('Cobertura Promedio de Días por Serie', fontsize=12)
-        ax1.set_ylabel('Cobertura [%]', fontsize=10)
+        ax1.set_title('Average Day Coverage by Series', fontsize=12)
+        ax1.set_ylabel('Coverage [%]', fontsize=10)
         ax1.tick_params(axis='x', rotation=45)
         ax1.grid(True, alpha=0.3)
         
         # Gráfico 2: Número de puntos
         metricas_promedio['Num_Puntos_Originales'].plot(kind='bar', ax=ax2, color='#ff7f0e')
-        ax2.set_title('Número Promedio de Puntos por Serie', fontsize=12)
-        ax2.set_ylabel('Puntos Originales', fontsize=10)
+        ax2.set_title('Average Number of Points by Series', fontsize=12)
+        ax2.set_ylabel('Original Points', fontsize=10)
         ax2.tick_params(axis='x', rotation=45)
         ax2.grid(True, alpha=0.3)
         
         # Gráfico 3: Coeficiente de variación
         metricas_promedio['Coef_Variacion_Pct'].plot(kind='bar', ax=ax3, color='#2ca02c')
-        ax3.set_title('Coeficiente de Variación Promedio por Serie', fontsize=12)
-        ax3.set_ylabel('Coef. Variación [%]', fontsize=10)
+        ax3.set_title('Average Coefficient of Variation by Series', fontsize=12)
+        ax3.set_ylabel('Coef. Variation [%]', fontsize=10)
         ax3.tick_params(axis='x', rotation=45)
         ax3.grid(True, alpha=0.3)
         
         # Gráfico 4: Sesgo del cuantil
         metricas_promedio['Sesgo_Cuantil_Pct'].plot(kind='bar', ax=ax4, color='#d62728')
-        ax4.set_title('Sesgo Cuantil vs Promedio por Serie', fontsize=12)
-        ax4.set_ylabel('Sesgo [%]', fontsize=10)
+        ax4.set_title('Quantile Bias vs Average by Series', fontsize=12)
+        ax4.set_ylabel('Bias [%]', fontsize=10)
         ax4.tick_params(axis='x', rotation=45)
         ax4.grid(True, alpha=0.3)
         
-        plt.suptitle('Métricas de Validez Promedio - Mediodía Solar', fontsize=16)
+        plt.suptitle('Average Validity Metrics - Solar Noon', fontsize=16)
         plt.tight_layout()
         
         if save_figures:
@@ -2232,23 +2430,23 @@ def _plot_validity_statistics_solar_noon(validez_data, output_dir, save_figures,
                     '-o', color=color, label=serie, markersize=4, alpha=0.8)
         
         # Configurar subgráficos
-        ax1.set_title('Evolución Cobertura de Días', fontsize=12)
-        ax1.set_ylabel('Cobertura [%]', fontsize=10)
+        ax1.set_title('Day Coverage Evolution', fontsize=12)
+        ax1.set_ylabel('Coverage [%]', fontsize=10)
         ax1.grid(True, alpha=0.3)
         ax1.legend(fontsize=8)
         
-        ax2.set_title('Evolución Número de Puntos', fontsize=12)
-        ax2.set_ylabel('Puntos Originales', fontsize=10)
+        ax2.set_title('Number of Points Evolution', fontsize=12)
+        ax2.set_ylabel('Original Points', fontsize=10)
         ax2.grid(True, alpha=0.3)
         
-        ax3.set_title('Evolución Coeficiente de Variación', fontsize=12)
-        ax3.set_ylabel('Coef. Variación [%]', fontsize=10)
-        ax3.set_xlabel('Fecha', fontsize=10)
+        ax3.set_title('Coefficient of Variation Evolution', fontsize=12)
+        ax3.set_ylabel('Coef. Variation [%]', fontsize=10)
+        ax3.set_xlabel('Date', fontsize=10)
         ax3.grid(True, alpha=0.3)
         
-        ax4.set_title('Evolución Sesgo Cuantil', fontsize=12)
-        ax4.set_ylabel('Sesgo [%]', fontsize=10)
-        ax4.set_xlabel('Fecha', fontsize=10)
+        ax4.set_title('Quantile Bias Evolution', fontsize=12)
+        ax4.set_ylabel('Bias [%]', fontsize=10)
+        ax4.set_xlabel('Date', fontsize=10)
         ax4.grid(True, alpha=0.3)
         
         # Formatear fechas en todos los subgráficos
@@ -2256,7 +2454,7 @@ def _plot_validity_statistics_solar_noon(validez_data, output_dir, save_figures,
             ax.xaxis.set_major_formatter(mdates.DateFormatter('%m-%d'))
             ax.tick_params(axis='x', rotation=45, labelsize=8)
         
-        plt.suptitle('Evolución Temporal de Métricas de Validez - Mediodía Solar', fontsize=16)
+        plt.suptitle('Temporal Evolution of Validity Metrics - Solar Noon', fontsize=16)
         plt.tight_layout()
         
         if save_figures:

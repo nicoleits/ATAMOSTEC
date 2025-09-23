@@ -196,9 +196,9 @@ def analyze_ref_cells_data(raw_data_filepath: str) -> bool:
             
             if plotted_irradiance:
                 ax_irr.legend(loc='best')
-                ax_irr.set_ylabel('Irradiancia [W/m²]')
-                ax_irr.set_xlabel('Día')
-                ax_irr.set_title('Irradiancia Diaria - Celdas de Referencia Seleccionadas')
+                ax_irr.set_ylabel('Irradiance [W/m²]')
+                ax_irr.set_xlabel('Day')
+                ax_irr.set_title('Daily Irradiance - Selected Reference Cells')
                 ax_irr.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
                 plt.xticks(rotation=45, ha='right')
                 plt.tight_layout()
@@ -239,9 +239,9 @@ def analyze_ref_cells_data(raw_data_filepath: str) -> bool:
         
         if plotted_weekly_sr:
             ax_w.legend(loc='best')
-            ax_w.set_ylabel(f'Soiling Ratio{" Ajustado" if settings.REFCELLS_ADJUST_TO_100_FLAG else ""} [%]')
-            ax_w.set_xlabel('Semana')
-            ax_w.set_title(f'Soiling Ratio{" Ajustado" if settings.REFCELLS_ADJUST_TO_100_FLAG else ""} - Celdas de Referencia (Semanal Q25)')
+            ax_w.set_ylabel(f'Soiling Ratio{" Adjusted" if settings.REFCELLS_ADJUST_TO_100_FLAG else ""} [%]')
+            ax_w.set_xlabel('Week')
+            ax_w.set_title(f'Soiling Ratio{" Adjusted" if settings.REFCELLS_ADJUST_TO_100_FLAG else ""} - Reference Cells (Weekly Q25)')
             ax_w.set_ylim([90, 110])
             ax_w.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
             plt.xticks(rotation=45, ha='right')
@@ -273,9 +273,9 @@ def analyze_ref_cells_data(raw_data_filepath: str) -> bool:
 
         if plotted_daily_sr:
             ax_d.legend(loc='best')
-            ax_d.set_ylabel(f'Soiling Ratio{" Ajustado" if settings.REFCELLS_ADJUST_TO_100_FLAG else ""} [%]')
-            ax_d.set_xlabel('Día')
-            ax_d.set_title(f'Soiling Ratio{" Ajustado" if settings.REFCELLS_ADJUST_TO_100_FLAG else ""} - Celdas de Referencia (Diario Q25)')
+            ax_d.set_ylabel(f'Soiling Ratio{" Adjusted" if settings.REFCELLS_ADJUST_TO_100_FLAG else ""} [%]')
+            ax_d.set_xlabel('Day')
+            ax_d.set_title(f'Soiling Ratio{" Adjusted" if settings.REFCELLS_ADJUST_TO_100_FLAG else ""} - Reference Cells (Daily Q25)')
             ax_d.set_ylim([90, 110])
             ax_d.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
             plt.xticks(rotation=45, ha='right')
@@ -305,9 +305,9 @@ def analyze_ref_cells_data(raw_data_filepath: str) -> bool:
                 if not serie_w_ind_adj.dropna().empty:
                     fig_w_ind, ax_w_ind = plt.subplots(figsize=(10, 5))
                     serie_w_ind_adj.plot(ax=ax_w_ind, style='o-', alpha=0.85, label=f'SR Photocells', linewidth=1)
-                    ax_w_ind.set_ylabel(f'Soiling Ratio{" Ajustado" if settings.REFCELLS_ADJUST_TO_100_FLAG else ""} [%]')
-                    ax_w_ind.set_xlabel('Semana')
-                    ax_w_ind.set_title('Soiling Ratio con Celdas de Referencia')
+                    ax_w_ind.set_ylabel(f'Soiling Ratio{" Adjusted" if settings.REFCELLS_ADJUST_TO_100_FLAG else ""} [%]')
+                    ax_w_ind.set_xlabel('Week')
+                    ax_w_ind.set_title('Soiling Ratio with Reference Cells')
                     ax_w_ind.grid(True, which='both', linestyle='--'); ax_w_ind.legend(loc='best')
                     ax_w_ind.set_ylim([90, 110])
                     ax_w_ind.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
@@ -333,9 +333,9 @@ def analyze_ref_cells_data(raw_data_filepath: str) -> bool:
                 if not serie_d_ind_adj.dropna().empty:
                     fig_d_ind, ax_d_ind = plt.subplots(figsize=(10, 5))
                     serie_d_ind_adj.plot(ax=ax_d_ind, style='o-', alpha=0.85, label=f'SR Photocells', linewidth=1)
-                    ax_d_ind.set_ylabel(f'Soiling Ratio{" Ajustado" if settings.REFCELLS_ADJUST_TO_100_FLAG else ""} [%]')
-                    ax_d_ind.set_xlabel('Día')
-                    ax_d_ind.set_title(f'SR{" Adj." if settings.REFCELLS_ADJUST_TO_100_FLAG else ""} - {col} (Diario Q25)')
+                    ax_d_ind.set_ylabel(f'Soiling Ratio{" Adjusted" if settings.REFCELLS_ADJUST_TO_100_FLAG else ""} [%]')
+                    ax_d_ind.set_xlabel('Day')
+                    ax_d_ind.set_title(f'SR{" Adj." if settings.REFCELLS_ADJUST_TO_100_FLAG else ""} - {col} (Daily Q25)')
                     ax_d_ind.grid(True, which='both', linestyle='--'); ax_d_ind.legend(loc='best')
                     ax_d_ind.set_ylim([90, 110])
                     ax_d_ind.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
@@ -664,11 +664,11 @@ def _generate_daily_q25_trend_plot(df_daily_sr_q25: pd.DataFrame, cell_name: str
         y_trend = slope * x + intercept
         # Graficar la tendencia sobre las mismas fechas con el mismo color que la curva
         ax.plot(serie.index, y_trend, '--', linewidth=2, alpha=0.7,
-                label=f'Tendencia: {slope:.3f}%/día, R²: {r2:.3f}', color=ax.lines[-1].get_color())
+                label=f'Trend: {slope:.3f}%/day, R²: {r2:.3f}', color=ax.lines[-1].get_color())
 
-    ax.set_ylabel(f'Soiling Ratio{" Ajustado" if settings.REFCELLS_ADJUST_TO_100_FLAG else ""} [%]')
-    ax.set_xlabel('Día')
-    ax.set_title(f'SR Diario Q25 con Tendencia - {cell_name}')
+    ax.set_ylabel(f'Soiling Ratio{" Adjusted" if settings.REFCELLS_ADJUST_TO_100_FLAG else ""} [%]')
+    ax.set_xlabel('Day')
+    ax.set_title(f'Daily SR Q25 with Trend - {cell_name}')
     ax.grid(True, which='both', linestyle='--')
     ax.legend(loc='best')
     ax.set_ylim([90, 110])
@@ -860,8 +860,8 @@ def _analyze_cloudy_days_solar_noon(df_ref_cells: pd.DataFrame, ref_col: str, va
                     ax1.scatter(dates[mask], daily_stats.loc[mask, 'Irr_Mean'], 
                               c=colors_map[weather_type], label=weather_type, alpha=0.7, s=30)
             
-            ax1.set_title('Clasificación Climática - Mediodía Solar (Basada en Celda Limpia)', fontsize=14)
-            ax1.set_ylabel('Irradiancia Promedio Celda Limpia [W/m²]', fontsize=12)
+            ax1.set_title('Weather Classification - Solar Noon (Based on Clean Cell)', fontsize=14)
+            ax1.set_ylabel('Average Clean Cell Irradiance [W/m²]', fontsize=12)
             ax1.legend()
             ax1.grid(True, alpha=0.3)
             

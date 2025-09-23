@@ -238,12 +238,12 @@ def analyze_soiling_kit_data(raw_data_filepath: str) -> bool:
 
         # Isc Raw (Media Diaria)
         fig1, ax1 = plt.subplots(figsize=(15, 7))
-        if not df_sk[isc_soiled_col].dropna().empty: df_sk[isc_soiled_col].resample('D').mean().plot(ax=ax1, label=f'{isc_soiled_col} (Expuesto)')
-        if not df_sk[isc_ref_col].dropna().empty: df_sk[isc_ref_col].resample('D').mean().plot(ax=ax1, label=f'{isc_ref_col} (Protegido)')
-        ax1.set_ylabel('Corriente [A]', fontsize=16)
-        ax1.set_xlabel('Tiempo', fontsize=14)
+        if not df_sk[isc_soiled_col].dropna().empty: df_sk[isc_soiled_col].resample('D').mean().plot(ax=ax1, label=f'{isc_soiled_col} (Exposed)')
+        if not df_sk[isc_ref_col].dropna().empty: df_sk[isc_ref_col].resample('D').mean().plot(ax=ax1, label=f'{isc_ref_col} (Protected)')
+        ax1.set_ylabel('Current [A]', fontsize=16)
+        ax1.set_xlabel('Time', fontsize=14)
         ax1.grid(True)
-        ax1.set_title('Soiling Kit - Isc Original (Media Diaria)', fontsize=16)
+        ax1.set_title('Soiling Kit - Original Isc (Daily Average)', fontsize=16)
         if ax1.has_data(): ax1.legend(fontsize=12, frameon=True)
         ax1.tick_params(axis='both', labelsize=12)
         ax1.xaxis.set_major_formatter(date_fmt_daily)
@@ -255,12 +255,12 @@ def analyze_soiling_kit_data(raw_data_filepath: str) -> bool:
 
         # Isc Corregida (Media Diaria)
         fig2, ax2 = plt.subplots(figsize=(15, 7))
-        if not df_sk['Isc_Soiled_Corrected'].dropna().empty: df_sk['Isc_Soiled_Corrected'].resample('D').mean().plot(ax=ax2, label='Isc Expuesto Corregida')
-        if not df_sk['Isc_Ref_Corrected'].dropna().empty: df_sk['Isc_Ref_Corrected'].resample('D').mean().plot(ax=ax2, label='Isc Protegido Corregida')
-        ax2.set_ylabel('Isc Corregida por Temp. [A]', fontsize=16)
-        ax2.set_xlabel('Tiempo', fontsize=14)
+        if not df_sk['Isc_Soiled_Corrected'].dropna().empty: df_sk['Isc_Soiled_Corrected'].resample('D').mean().plot(ax=ax2, label='Temperature Corrected Exposed Isc')
+        if not df_sk['Isc_Ref_Corrected'].dropna().empty: df_sk['Isc_Ref_Corrected'].resample('D').mean().plot(ax=ax2, label='Temperature Corrected Protected Isc')
+        ax2.set_ylabel('Temperature Corrected Isc [A]', fontsize=16)
+        ax2.set_xlabel('Time', fontsize=14)
         ax2.grid(True)
-        ax2.set_title('Soiling Kit - Isc Corregida por Temp. (Media Diaria)', fontsize=16)
+        ax2.set_title('Soiling Kit - Temperature Corrected Isc (Daily Average)', fontsize=16)
         if ax2.has_data(): ax2.legend(fontsize=12)
         ax2.xaxis.set_major_formatter(date_fmt_daily)
         ax2.tick_params(axis='both', labelsize=12)
@@ -272,18 +272,18 @@ def analyze_soiling_kit_data(raw_data_filepath: str) -> bool:
         # SR Raw (Media Diaria)
         if not sr_daily_raw_mean.empty:
             fig3, ax3 = plt.subplots(figsize=(15, 7))
-            sr_daily_raw_mean.plot(ax=ax3, label='SR Raw (Media Diaria)')
+            sr_daily_raw_mean.plot(ax=ax3, label='Raw SR (Daily Average)', style='-*')
             
             # Calcular y graficar tendencia
             slope, intercept, trend_values = _calculate_trend(sr_daily_raw_mean)
             if slope is not None:
-                trend_label = f'Tendencia ({slope:.2f}%/día)'
+                trend_label = f'Trend ({slope:.2f}%/day)'
                 ax3.plot(sr_daily_raw_mean.index, trend_values, 'r--', label=trend_label)
             
             ax3.set_ylabel('Soiling Ratio (P/E) [%]', fontsize=16)
-            ax3.set_xlabel('Tiempo', fontsize=14)
+            ax3.set_xlabel('Time', fontsize=14)
             ax3.grid(True)
-            ax3.set_title(f'Soiling Kit - SR Raw (Media Diaria, SR > {sr_threshold}%)', fontsize=16)
+            ax3.set_title(f'Soiling Kit - Raw SR (Daily Average, SR > {sr_threshold}%)', fontsize=16)
             if ax3.has_data(): ax3.legend(fontsize=12)
             ax3.tick_params(axis='both', labelsize=12)
             ax3.xaxis.set_major_formatter(date_fmt_daily)
@@ -295,18 +295,18 @@ def analyze_soiling_kit_data(raw_data_filepath: str) -> bool:
         # SR Corregido (Media Diaria)
         if not sr_daily_corrected_mean.empty:
             fig4, ax4 = plt.subplots(figsize=(15, 7))
-            sr_daily_corrected_mean.plot(ax=ax4, label='SR Corregido (Media Diaria)')
+            sr_daily_corrected_mean.plot(ax=ax4, label='Temperature Corrected SR (Daily Average)')
             
             # Calcular y graficar tendencia
             slope, intercept, trend_values = _calculate_trend(sr_daily_corrected_mean)
             if slope is not None:
-                trend_label = f'Tendencia ({slope:.2f}%/día)'
+                trend_label = f'Trend ({slope:.2f}%/day)'
                 ax4.plot(sr_daily_corrected_mean.index, trend_values, 'r--', label=trend_label)
             
-            ax4.set_ylabel('Soiling Ratio Corregido (P/E) [%]', fontsize=16)
-            ax4.set_xlabel('Tiempo', fontsize=14)
+            ax4.set_ylabel('Temperature Corrected Soiling Ratio (P/E) [%]', fontsize=16)
+            ax4.set_xlabel('Time', fontsize=14)
             ax4.grid(True)
-            ax4.set_title(f'Soiling Kit - SR Corregido por Temp. (Media Diaria, SR > {sr_threshold}%)', fontsize=16)
+            ax4.set_title(f'Soiling Kit - Temperature Corrected SR (Daily Average, SR > {sr_threshold}%)', fontsize=16)
             if ax4.has_data(): ax4.legend(fontsize=12)
             ax4.tick_params(axis='both', labelsize=12)
             ax4.xaxis.set_major_formatter(date_fmt_daily)
@@ -326,9 +326,9 @@ def analyze_soiling_kit_data(raw_data_filepath: str) -> bool:
                     plotted_franjas = True
             if plotted_franjas: 
                 ax5.set_ylabel('Soiling Ratio (P/E) [%]', fontsize=16)
-                ax5.set_xlabel('Tiempo', fontsize=14)
+                ax5.set_xlabel('Time', fontsize=14)
                 ax5.grid(True)
-                ax5.set_title(f'Soiling Kit - SR Raw por Franja Horaria (Media Diaria, SR > {sr_threshold}%)', fontsize=16)
+                ax5.set_title(f'Soiling Kit - Raw SR by Time Slot (Daily Average, SR > {sr_threshold}%)', fontsize=16)
                 ax5.legend(fontsize=12)
                 ax5.tick_params(axis='both', labelsize=12)
                 ax5.xaxis.set_major_formatter(date_fmt_daily)
@@ -340,13 +340,13 @@ def analyze_soiling_kit_data(raw_data_filepath: str) -> bool:
         # SR Corregido (Minutal y Media Diaria)
         if 'SR_TempCorrected_Filtered' in df_sk_sr_filtered.columns and not df_sk_sr_filtered['SR_TempCorrected_Filtered'].dropna().empty:
             fig6, ax6 = plt.subplots(figsize=(15, 7))
-            df_sk_sr_filtered['SR_TempCorrected_Filtered'].plot(ax=ax6, style='.', alpha=0.3, label='SR Corregido (datos horarios)', markersize=2)
+            df_sk_sr_filtered['SR_TempCorrected_Filtered'].plot(ax=ax6, style='.', alpha=0.3, label='Temperature Corrected SR (hourly data)', markersize=2)
             if not sr_daily_corrected_mean.empty:
-                sr_daily_corrected_mean.plot(ax=ax6, style='-', linewidth=2, label='SR Corregido (Media Diaria)')
-            ax6.set_ylabel('Soiling Ratio Corregido (P/E) [%]', fontsize=16)
-            ax6.set_xlabel('Tiempo', fontsize=14)
+                sr_daily_corrected_mean.plot(ax=ax6, style='-', linewidth=2, label='Temperature Corrected SR (Daily Average)')
+            ax6.set_ylabel('Temperature Corrected Soiling Ratio (P/E) [%]', fontsize=16)
+            ax6.set_xlabel('Time', fontsize=14)
             ax6.grid(True)
-            ax6.set_title(f'Soiling Kit - SR Corregido por Temp. (Minutal y Media Diaria, SR > {sr_threshold}%)', fontsize=16)
+            ax6.set_title(f'Soiling Kit - Temperature Corrected SR (Minute and Daily Average, SR > {sr_threshold}%)', fontsize=16)
             if ax6.has_data(): ax6.legend(fontsize=12)
             ax6.tick_params(axis='both', labelsize=12)
             ax6.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d %H:%M')) # Usar formato con hora
@@ -375,11 +375,11 @@ def analyze_soiling_kit_data(raw_data_filepath: str) -> bool:
                     x_ticks_labels_raw = [date.strftime('%Y-%m-%d') for date in temp_sr_weekly_raw.index.to_pydatetime()]
                     x_ticks_positions_raw = list(range(len(temp_sr_weekly_raw)))
                     temp_sr_weekly_raw.index = x_ticks_positions_raw
-                    temp_sr_weekly_raw.plot(ax=ax7, style='-o', label='SR Raw (Q25 Semanal)', color=color_raw)
+                    temp_sr_weekly_raw.plot(ax=ax7, style='-o', label='Raw SR (Weekly Q25)', color=color_raw)
                     # Calcular y graficar tendencia
                     slope, intercept, trend_values = _calculate_trend(temp_sr_weekly_raw)
                     if slope is not None:
-                        trend_label = f'Tendencia Raw ({slope:.2f}%/semana)'
+                        trend_label = f'Raw Trend ({slope:.2f}%/week)'
                         ax7.plot(temp_sr_weekly_raw.index, trend_values, '--', color=color_raw, label=trend_label)
                     plotted_q25 = True
             
@@ -396,19 +396,19 @@ def analyze_soiling_kit_data(raw_data_filepath: str) -> bool:
                     x_ticks_positions_corrected = list(range(len(temp_sr_weekly_corrected)))
                     temp_sr_weekly_corrected.index = x_ticks_positions_corrected
                     plot_style_corrected = '-s' if plotted_q25 and not sr_weekly_raw_q25.empty else '-o'
-                    temp_sr_weekly_corrected.plot(ax=ax7, style=plot_style_corrected, label='SR Corregido por Temp. (Q25 Semanal)', color=color_corr)
+                    temp_sr_weekly_corrected.plot(ax=ax7, style=plot_style_corrected, label='Temperature Corrected SR (Weekly Q25)', color=color_corr)
                     # Calcular y graficar tendencia
                     slope, intercept, trend_values = _calculate_trend(temp_sr_weekly_corrected)
                     if slope is not None:
-                        trend_label = f'Tendencia Corregida ({slope:.2f}%/semana)'
+                        trend_label = f'Corrected Trend ({slope:.2f}%/week)'
                         ax7.plot(temp_sr_weekly_corrected.index, trend_values, '--', color=color_corr, label=trend_label)
                     plotted_q25 = True
 
             if plotted_q25:
                 ax7.set_ylabel('Soiling Ratio [%]', fontsize=14)
-                ax7.set_xlabel('Semanal', fontsize=14)
+                ax7.set_xlabel('Date', fontsize=14)
                 ax7.grid(True)
-                ax7.set_title(f'Soiling Kit - SR Semanal ', fontsize=16)
+                ax7.set_title(f'Soiling Kit - Weekly SR ', fontsize=16)
                 ax7.legend(loc='best', frameon=True, fontsize=12)
                 ax7.set_ylim(90, 110)
                 final_tick_positions = []
@@ -442,13 +442,13 @@ def analyze_soiling_kit_data(raw_data_filepath: str) -> bool:
 
         # Temperaturas Módulos (Media Diaria)
         fig8, ax8 = plt.subplots(figsize=(15, 7))
-        if not df_sk[temp_soiled_col].dropna().empty: df_sk[temp_soiled_col].resample('D').mean().plot(ax=ax8, label=f'{temp_soiled_col} (Expuesto)', style='*')
-        if not df_sk[temp_ref_col].dropna().empty: df_sk[temp_ref_col].resample('D').mean().plot(ax=ax8, label=f'{temp_ref_col} (Protegido)', style='*')
-        ax8.set_ylabel('Temperatura [°C]', fontsize=16)
-        ax8.set_xlabel('Tiempo', fontsize=14)
-        ax8.set_xlim(pd.Timestamp('2025-01-01', tz='UTC'), pd.Timestamp('2025-08-05 23:59:59', tz='UTC'))
+        if not df_sk[temp_soiled_col].dropna().empty: df_sk[temp_soiled_col].resample('D').mean().plot(ax=ax8, label=f'{temp_soiled_col} (Exposed)', style='*')
+        if not df_sk[temp_ref_col].dropna().empty: df_sk[temp_ref_col].resample('D').mean().plot(ax=ax8, label=f'{temp_ref_col} (Protected)', style='*')
+        ax8.set_ylabel('Temperature [°C]', fontsize=16)
+        ax8.set_xlabel('Time', fontsize=14)
+        ax8.set_xlim(pd.Timestamp('2025-01-01', tz='UTC'), pd.Timestamp('2025-08-11 23:59:59', tz='UTC'))
         ax8.grid(True)
-        ax8.set_title('Soiling Kit - Temperaturas de Módulos (Media Diaria)', fontsize=16)
+        ax8.set_title('Soiling Kit - Module Temperatures (Daily Average)', fontsize=16)
         if ax8.has_data(): ax8.legend(fontsize=12)
         ax8.tick_params(axis='both', labelsize=12)
         
@@ -490,13 +490,13 @@ def analyze_soiling_kit_data(raw_data_filepath: str) -> bool:
         # Temperaturas Módulos (Datos en Bruto)
         fig8b, ax8b = plt.subplots(figsize=(15, 7))
         if not df_sk[temp_soiled_col].dropna().empty:
-            df_sk[temp_soiled_col].plot(ax=ax8b, label=f'{temp_soiled_col} (Expuesto)', alpha=0.7)
+            df_sk[temp_soiled_col].plot(ax=ax8b, label=f'{temp_soiled_col} (Exposed)', alpha=0.7)
         if not df_sk[temp_ref_col].dropna().empty:
-            df_sk[temp_ref_col].plot(ax=ax8b, label=f'{temp_ref_col} (Protegido)', alpha=0.7)
-        ax8b.set_ylabel('Temperatura [°C]', fontsize=16)
-        ax8b.set_xlabel('Tiempo', fontsize=14)
+            df_sk[temp_ref_col].plot(ax=ax8b, label=f'{temp_ref_col} (Protected)', alpha=0.7)
+        ax8b.set_ylabel('Temperature [°C]', fontsize=16)
+        ax8b.set_xlabel('Time', fontsize=14)
         ax8b.grid(True)
-        ax8b.set_title('Soiling Kit - Temperaturas de Módulos (Datos en Bruto)', fontsize=16)
+        ax8b.set_title('Soiling Kit - Module Temperatures (Raw Data)', fontsize=16)
         if ax8b.has_data(): ax8b.legend(fontsize=12)
         ax8b.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d %H:%M'))
         save_plot_matplotlib(fig8b, 'sk_temperaturas_modulos_raw.png', paths.SOILING_KIT_OUTPUT_SUBDIR_GRAPH)
@@ -504,23 +504,23 @@ def analyze_soiling_kit_data(raw_data_filepath: str) -> bool:
         plt.show()
         plt.close(fig8b)
 
-        # Temperaturas Módulos (Datos en Bruto) solo abril y mayo 2025
+        # Temperaturas Módulos (Datos en Bruto) 
         start_plot = pd.Timestamp('2025-07-01', tz='UTC')
-        end_plot = pd.Timestamp('2025-08-05 23:59:59', tz='UTC')
+        end_plot = pd.Timestamp('2025-08-11 23:59:59', tz='UTC')
         df_sk_plot = df_sk[(df_sk.index >= start_plot) & (df_sk.index <= end_plot)]
         fig8c, ax8c = plt.subplots(figsize=(15, 7))
         if not df_sk_plot[temp_soiled_col].dropna().empty:
-            df_sk_plot[temp_soiled_col].plot(ax=ax8c, label=f'{temp_soiled_col} (Expuesto)', alpha=0.7, style='.')
+            df_sk_plot[temp_soiled_col].plot(ax=ax8c, label='Te(C) (Exposed)', alpha=0.7, style='.')
         if not df_sk_plot[temp_ref_col].dropna().empty:
-            df_sk_plot[temp_ref_col].plot(ax=ax8c, label=f'{temp_ref_col} (Protegido)', alpha=0.7, style='.')
-        ax8c.set_ylabel('Temperatura [°C]', fontsize=16)
-        ax8c.set_xlabel('Tiempo', fontsize=14)
+            df_sk_plot[temp_ref_col].plot(ax=ax8c, label='Tp(C) (Protected)', alpha=0.7, style='.')
+        ax8c.set_ylabel('Temperature [°C]', fontsize=16)
+        ax8c.set_xlabel('Time', fontsize=14)
         ax8c.grid(True)
-        ax8c.set_title('Soiling Kit - Temperaturas de Módulos (Abril y Mayo 2025, Datos en Bruto)', fontsize=16)
-        if ax8c.has_data(): ax8c.legend(fontsize=12)
+        ax8c.set_title('Soiling Kit - Module Temperatures (Raw Data)', fontsize=16)
+        if ax8c.has_data(): ax8c.legend(fontsize=12, loc='upper left')
         ax8c.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d %H:%M'))
         save_plot_matplotlib(fig8c, 'sk_temperaturas_modulos_raw_abr_may_2025.png', paths.SOILING_KIT_OUTPUT_SUBDIR_GRAPH)
-        print("Mostrando figura 8c: Temperaturas de Módulos (Abril y Mayo 2025, Datos en Bruto)")
+        print("Mostrando figura 8c: Temperaturas de Módulos (Datos en Bruto)")
         plt.show()
         plt.close(fig8c)
 

@@ -22,7 +22,7 @@ PVSTAND_NORMALIZE_SR_FLAG = True
 PVSTAND_NORMALIZE_SR_REF_DATE_STR = '2024-08-01'
 PVSTAND_PMAX_SR_OFFSET = 3.0 
 PVSTAND_SR_MIN_FILTER_THRESHOLD = 0.7 
-PVSTAND_SR_MAX_FILTER_THRESHOLD = 1.02
+PVSTAND_SR_MAX_FILTER_THRESHOLD = 1.01
 
 # --- Parámetros de Transmitancia PV Glasses (ejemplos) ---
 PV_GLASSES_COLUMN_PATTERN = r"^R_FC\d+_Avg$"
@@ -126,7 +126,7 @@ PVSTAND_STC_GHI = 1000
 PVSTAND_STC_TEMP = 25
 # Nuevos parámetros basados en el notebook
 PVSTAND_ANALYSIS_START_DATE_STR = '2024-08-01' # Fecha de inicio del análisis para PVStand
-PVSTAND_ANALYSIS_END_DATE_STR = '2025-07-28'   # Fecha de fin del análisis para PVStand
+PVSTAND_ANALYSIS_END_DATE_STR = '2025-08-26'   # Fecha de fin del análisis para PVStand
 PVSTAND_RESAMPLE_FREQ_MINUTES = 1             # Frecuencia de remuestreo en minutos para PVStand
 PVSTAND_GRAPH_QUANTILE = 0.25                 # Cuantil para agregaciones en gráficos de PVStand
 # Tomados de la sección superior de PVStand para consistencia, ya que la función del notebook los usa
@@ -143,7 +143,7 @@ PVSTAND_NORMALIZE_SR_FLAG = True
 PVSTAND_NORMALIZE_SR_REF_DATE_STR = '2024-08-01' # Actualizado de '2024-08-01' a '2024-08-15' como en la celda 4, pero la celda 3 usa '2024-08-01' como default. Mantengo '2024-08-01' por ahora.
 PVSTAND_PMAX_SR_OFFSET = 3.0 # El notebook usa 0.0 en la celda de llamada, pero 3.0 en la sección de arriba. Uso 3.0 por consistencia con lo existente.
 PVSTAND_SR_MIN_FILTER_THRESHOLD = 0.7 
-PVSTAND_SR_MAX_FILTER_THRESHOLD = 1.02
+PVSTAND_SR_MAX_FILTER_THRESHOLD = 1.01
 # ... (otras configuraciones)
 
 # --- Settings para Ref Cells Analyzer ---
@@ -166,8 +166,8 @@ PV_GLASSES_SR_TO_MASS_MAP = {
     'SR_R_FC4': 'Masa_B_Referencia',  # SR_R_FC4 se asocia con Masa B
     'SR_R_FC5': 'Masa_A_Referencia'   # SR_R_FC5 se asocia con Masa A
 }
-PV_GLASSES_PERIOD_ORDER_FOR_BAR_CHART = ['semanal', '2 semanas', 'Mensual', 'Trimestral', 'Cuatrimestral', 'Semestral']
-PV_GLASSES_BAR_CHART_COLORS = ['#FFC300', '#FF5733', '#C70039', '#00505C'] # Amarillo-Naranja, Naranja-Rojo, Rojo-Carmesi, Azul verdoso oscuro
+PV_GLASSES_PERIOD_ORDER_FOR_BAR_CHART = ['semanal', '2 semanas', 'Mensual', 'Trimestral', 'Cuatrimestral', 'Semestral', '1 año']
+PV_GLASSES_BAR_CHART_COLORS = ['#FFC300', '#FF5733', '#C70039', '#00505C', '#8E44AD'] # Amarillo-Naranja, Naranja-Rojo, Rojo-Carmesi, Azul verdoso oscuro, Morado
 PV_GLASSES_DIRTY_COLUMNS_FOR_SR = ["R_FC3_Avg", "R_FC4_Avg", "R_FC5_Avg"] # Columnas de vidrios sucios para calcular SR
 PV_GLASSES_REF_PREFIX = "R" # Prefijo para las columnas SR, ej. SR_R_FC3
 
@@ -222,8 +222,8 @@ PV_GLASSES_SR_TO_MASS_MAP = {
     'SR_R_FC4': 'Masa_B_Referencia',  # SR_R_FC4 se asocia con Masa B
     'SR_R_FC5': 'Masa_A_Referencia'   # SR_R_FC5 se asocia con Masa A
 }
-PV_GLASSES_PERIOD_ORDER_FOR_BAR_CHART = ['semanal', '2 semanas', 'Mensual', 'Trimestral', 'Cuatrimestral', 'Semestral']
-PV_GLASSES_BAR_CHART_COLORS = ['#FFC300', '#FF5733', '#C70039', '#00505C'] # Amarillo-Naranja, Naranja-Rojo, Rojo-Carmesi, Azul verdoso oscuro
+PV_GLASSES_PERIOD_ORDER_FOR_BAR_CHART = ['semanal', '2 semanas', 'Mensual', 'Trimestral', 'Cuatrimestral', 'Semestral', '1 año']
+PV_GLASSES_BAR_CHART_COLORS = ['#FFC300', '#FF5733', '#C70039', '#00505C', '#8E44AD'] # Amarillo-Naranja, Naranja-Rojo, Rojo-Carmesi, Azul verdoso oscuro, Morado
 PV_GLASSES_DIRTY_COLUMNS_FOR_SR = ["R_FC3_Avg", "R_FC4_Avg", "R_FC5_Avg"] # Columnas de vidrios sucios para calcular SR
 PV_GLASSES_REF_PREFIX = "R" # Prefijo para las columnas SR, ej. SR_R_FC3
 

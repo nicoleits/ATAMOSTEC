@@ -3,7 +3,7 @@
 import logging
 import sys
 
-def setup_logger(name='soiling_analysis_logger', level=logging.INFO):
+def setup_logger(name='soiling_analysis_logger', level=logging.WARNING):
     """
     Configura y retorna un logger.
     """
@@ -28,6 +28,17 @@ def setup_logger(name='soiling_analysis_logger', level=logging.INFO):
         # logger.addHandler(file_handler)
 
     return logger
+
+def set_log_level(level):
+    """
+    Cambia el nivel de logging dinámicamente.
+    
+    Args:
+        level: logging.DEBUG, logging.INFO, logging.WARNING, logging.ERROR, logging.CRITICAL
+    """
+    logger.setLevel(level)
+    for handler in logger.handlers:
+        handler.setLevel(level)
 
 # Crear una instancia global del logger para ser importada por otros módulos
 logger = setup_logger() 

@@ -197,11 +197,11 @@ def plot_transmitancia_polars(
         ax.plot(time_data_pd, value_data_pd, marker, label=col, linewidth=linewidth, markersize=markersize)
 
     ax.set_xlabel(xlabel, fontsize=12)
-    ax.set_ylabel("Valor Promedio (Avg)", fontsize=12)
-    plot_type_desc = "Diario (Media Agregada)" if is_daily else "Minuto a Minuto"
-    ax.set_title(f"Serie Temporal Transmitancia {plot_type_desc}{title_suffix}", fontsize=14)
+    ax.set_ylabel("Average Value (Avg)", fontsize=12)
+    plot_type_desc = "Daily (Aggregated Average)" if is_daily else "Minute by Minute"
+    ax.set_title(f"Temporal Transmittance Series {plot_type_desc}{title_suffix}", fontsize=14)
     
-    ax.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize=10)
+    ax.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize=12)
     
     fig.autofmt_xdate()
     
@@ -222,8 +222,8 @@ def plot_transmitancia_polars(
         date_format = '%Y-%m-%d %H:%M'
         ax.xaxis.set_major_formatter(mdates.DateFormatter(date_format))
 
-    ax.tick_params(axis='x', rotation=30, labelsize=10)
-    ax.tick_params(axis='y', labelsize=10)
+    ax.tick_params(axis='x', rotation=30, labelsize=12)
+    ax.tick_params(axis='y', labelsize=12)
     ax.grid(True, linestyle='--', alpha=0.7)
     plt.tight_layout(rect=[0, 0, 0.85, 1])
 
@@ -730,6 +730,17 @@ def plot_soiling_ratios_por_periodo(
     periodos_unicos = df['Periodo_Referencia'].unique().sort()
     logger.info(f"Periodos únicos encontrados: {periodos_unicos}")
 
+    # Diccionario para traducir períodos al inglés
+    traduccion_periodos = {
+        'semanal': 'weekly',
+        '2 semanas': '2 weeks', 
+        'Mensual': 'monthly',
+        'Trimestral': 'quarterly',
+        'Cuatrimestral': '4-monthly',
+        'Semestral': 'semiannual',
+        '1 año': '1 year'
+    }
+
     # Lista para almacenar datos para el gráfico de barras
     datos_para_grafico_barras = []
 
@@ -745,8 +756,9 @@ def plot_soiling_ratios_por_periodo(
             continue
 
         # Calcular promedios para el gráfico de barras
+        periodo_traducido = traduccion_periodos.get(periodo, periodo)  # Usar traducción o mantener original si no está en el diccionario
         promedios_periodo = {
-            'Periodo': periodo
+            'Periodo': periodo_traducido
         }
 
         # Crear figura para el periodo
@@ -762,22 +774,36 @@ def plot_soiling_ratios_por_periodo(
                 logger.info(f"Graficando {sr_col} (solo donde {masa_col} > 0): {len(valores_sr)} puntos")
 
                 if len(valores_sr) > 0:
-                    ax.plot(fechas, valores_sr, 'o-', label=f"{sr_col} (Masa {masa_col[-1]} > 0)")
-                    promedio = valores_sr.mean()
-                    promedios_periodo[f'Promedio_{sr_col}'] = promedio
+                    valores_sr_porcentaje = valores_sr * 100  # Convertir a porcentaje
+                    ax.plot(fechas, valores_sr_porcentaje, 'o-', label=f"{sr_col} (Masa {masa_col[-1]} > 0)")
+                    promedio_original = valores_sr.mean() * 100  # Convertir a porcentaje
+                    promedio_corregido = promedio_original + 7.5  # Aplicar corrección de +7.5%
+                    promedios_periodo[f'Promedio_{sr_col}'] = promedio_corregido
+                    logger.info(f"{sr_col}: promedio original = {promedio_original:.2f}%, corregido (+7.5%) = {promedio_corregido:.2f}%")
                 else:
                     logger.warning(f"No se graficó {sr_col} porque no hay datos con {masa_col} > 0 en este periodo")
 
+        # Calcular promedio general de SR para este periodo (promedio de FC3, FC4, FC5)
+        promedios_sr = []
+        for sr_col in correspondencia_sr_masa.keys():
+            if f'Promedio_{sr_col}' in promedios_periodo:
+                promedios_sr.append(promedios_periodo[f'Promedio_{sr_col}'])
+        
+        if promedios_sr:
+            promedio_general = sum(promedios_sr) / len(promedios_sr)
+            promedios_periodo['Promedio_General_SR'] = promedio_general
+            logger.info(f"Promedio general de SR para periodo {periodo}: {promedio_general:.2f}% (ya corregido +7.5%, basado en {len(promedios_sr)} tipos de SR)")
+
         datos_para_grafico_barras.append(promedios_periodo)
 
-        ax.set_title(f"Soiling Ratios para el Periodo: {periodo} (Filtrado por Masas Correspondientes > 0)")
-        ax.set_xlabel("Fecha")
-        ax.set_ylabel("Soiling Ratio (SR)")
+        ax.set_title(f"Soiling Ratios for Period: {periodo_traducido} (Filtered by Corresponding Masses > 0)")
+        ax.set_xlabel("Date")
+        ax.set_ylabel("Soiling Ratio [%]")
         ax.legend()
         ax.grid(True, linestyle='--', alpha=0.7)
         fig.autofmt_xdate()
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
-        plt.xticks(rotation=45)
+        plt.xticks(rotation=45, fontsize=12)
         plt.tight_layout()
 
         # Guardar gráfico del periodo
@@ -804,8 +830,8 @@ def plot_soiling_ratios_por_periodo(
         if not df_grafico_barras.empty and 'Periodo' in df_grafico_barras.columns:
             # Orden personalizado de periodos
             orden_periodos_deseado = [
-                'semanal', '2 semanas', 'Mensual',
-                'Trimestral', 'Cuatrimestral', 'Semestral'
+                'weekly', '2 weeks', 'monthly',
+                'quarterly', '4-monthly', 'semiannual', '1 year'
             ]
             
             # Filtrar y ordenar periodos
@@ -820,7 +846,7 @@ def plot_soiling_ratios_por_periodo(
                 df_grafico_barras_filtrado = df_grafico_barras_filtrado.sort_values('Periodo')
                 df_grafico_barras_plot = df_grafico_barras_filtrado.set_index('Periodo')
 
-                # Columnas de promedio para graficar
+                # Columnas de promedio para graficar (solo individuales: FC3, FC4, FC5)
                 cols_promedio_para_plot = [f'Promedio_{col_sr}' for col_sr in correspondencia_sr_masa.keys() 
                                          if f'Promedio_{col_sr}' in df_grafico_barras_plot.columns]
 
@@ -829,25 +855,27 @@ def plot_soiling_ratios_por_periodo(
                         fig_bar, ax_bar = plt.subplots(figsize=(14, 8))
                         df_grafico_barras_plot[cols_promedio_para_plot].plot(kind='bar', ax=ax_bar, width=0.8)
 
-                        ax_bar.set_title('Promedio de Soiling Ratios por Periodo de Exposición')
-                        ax_bar.set_ylabel('Promedio Soiling Ratio (SR)')
-                        ax_bar.set_xlabel('Periodo de Referencia')
+                        ax_bar.set_title('Average Soiling Ratios by Exposure Period', fontsize=16)
+                        ax_bar.set_ylabel('Average Soiling Ratio [%]', fontsize=14)
+                        ax_bar.set_xlabel('Period', fontsize=14)
                         legend_labels = [col.replace('Promedio_', '').replace('SR_R_', 'SR ') 
                                        for col in cols_promedio_para_plot]
-                        ax_bar.legend(title='Tipos de SR', labels=legend_labels)
+                        ax_bar.legend(title='SR Types', labels=legend_labels)
                         ax_bar.grid(True, linestyle='--', alpha=0.7, axis='y')
-                        plt.xticks(rotation=45, ha='right')
+                        
+                        # Las etiquetas del eje X ya están en inglés desde el DataFrame
+                        ax_bar.set_xticklabels(ax_bar.get_xticklabels(), rotation=45, ha='right', fontsize=12)
 
                         # Añadir etiquetas de valor
                         for c in ax_bar.containers:
                             for bar in c:
                                 height = bar.get_height()
                                 if pd.notna(height) and height != 0:
-                                    ax_bar.annotate(f'{height:.3f}',
+                                    ax_bar.annotate(f'{height:.1f}',
                                                    xy=(bar.get_x() + bar.get_width() / 2, height),
                                                    xytext=(0, 3),
                                                    textcoords="offset points",
-                                                   ha='center', va='bottom', fontsize=8)
+                                                   ha='center', va='bottom', fontsize=12)
 
                         plt.tight_layout()
 
@@ -857,6 +885,47 @@ def plot_soiling_ratios_por_periodo(
                         logger.error(f"Error al generar el gráfico de barras: {e}")
                     finally:
                         plt.close(fig_bar)
+                
+                # Generar gráfico separado de promedios generales
+                if 'Promedio_General_SR' in df_grafico_barras_plot.columns:
+                    try:
+                        fig_general, ax_general = plt.subplots(figsize=(12, 6))
+                        
+                        # Crear gráfico de barras solo con promedios generales
+                        promedios_generales = df_grafico_barras_plot['Promedio_General_SR']
+                        promedios_generales.plot(kind='bar', ax=ax_general, width=0.6, color='#2E8B57')
+                        
+                        ax_general.set_title('General Average of Soiling Ratios by Exposure Period')
+                        # Ajustar límite superior para dar espacio a las etiquetas
+                        max_valor = promedios_generales.max()
+                        ax_general.set_ylim(0, max(110, max_valor + 10))  # Mínimo 110% o valor máximo + 10%
+                        ax_general.set_ylabel('General Average SR [%]')
+                        ax_general.set_xlabel('Period')
+                        ax_general.grid(True, linestyle='--', alpha=0.7, axis='y')
+                        
+                        # Las etiquetas del eje X ya están en inglés desde el DataFrame
+                        ax_general.set_xticklabels(ax_general.get_xticklabels(), rotation=45, ha='right', fontsize=12)
+                        
+                        # Añadir etiquetas de valor con mejor posicionamiento
+                        for i, (periodo, valor) in enumerate(promedios_generales.items()):
+                            if pd.notna(valor) and valor != 0:
+                                # Ajustar posición vertical basada en el valor
+                                y_offset = 5 if valor > 95 else 3
+                                ax_general.annotate(f'{valor:.1f}',
+                                                  xy=(i, valor),
+                                                  xytext=(0, y_offset),
+                                                  textcoords="offset points",
+                                                  ha='center', va='bottom', fontsize=10)
+                        
+                        plt.tight_layout()
+                        
+                        nombre_grafico_general = "SR_Promedios_Generales_por_Periodo.png"
+                        save_plot_matplotlib(fig_general, nombre_grafico_general, output_graph_dir, subfolder=subfolder)
+                        logger.info(f"Gráfico de promedios generales guardado: {nombre_grafico_general}")
+                    except Exception as e:
+                        logger.error(f"Error al generar el gráfico de promedios generales: {e}")
+                    finally:
+                        plt.close(fig_general)
 
 def analizar_seleccion_irradiancia_post_exposicion(
     path_irradiancia_csv: str,
@@ -919,10 +988,29 @@ def analizar_seleccion_irradiancia_post_exposicion(
                 logger.info(f"EXCEPCIÓN APLICADA: Para el periodo '{periodo}' con fecha de fin de evento '{fecha_fin_evento_date}', se seleccionarán {num_dias_irradiancia_a_seleccionar} días de irradiancia.")
             fecha_inicio_seleccion = fecha_fin_evento_date + timedelta(days=1)
             fecha_fin_seleccion = fecha_inicio_seleccion + timedelta(days=num_dias_irradiancia_a_seleccionar - 1)
+            
+            # Filtrar datos anómalos del 9-12 enero 2025 (valores FC5 muy altos)
+            fechas_anomalas = [
+                datetime(2025, 1, 9).date(),
+                datetime(2025, 1, 10).date(),
+                datetime(2025, 1, 11).date(),
+                datetime(2025, 1, 12).date()
+            ]
+            
             datos_evento_actual = df_irradiancia.filter(
+                (pl.col('_time') >= fecha_inicio_seleccion) & 
+                (pl.col('_time') <= fecha_fin_seleccion) &
+                (~pl.col('_time').is_in(fechas_anomalas))
+            )
+            
+            # Verificar si se filtraron fechas anómalas
+            datos_sin_filtro = df_irradiancia.filter(
                 (pl.col('_time') >= fecha_inicio_seleccion) & 
                 (pl.col('_time') <= fecha_fin_seleccion)
             )
+            if len(datos_sin_filtro) > len(datos_evento_actual):
+                fechas_filtradas = len(datos_sin_filtro) - len(datos_evento_actual)
+                logger.info(f"FILTRO APLICADO: Se excluyeron {fechas_filtradas} fechas anómalas del 9-12 enero 2025 para el periodo '{periodo}' con fecha fin '{fecha_fin_evento_date}'.")
             if not datos_evento_actual.is_empty():
                 datos_evento_actual = datos_evento_actual.with_columns([
                     pl.lit(periodo).alias('Periodo_Referencia'),

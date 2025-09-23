@@ -268,9 +268,9 @@ def run_analysis():
                                                     label=f'Pmax {module_name}', markersize=4, color=color)
                 
                 ax_combo_pmax.legend(fontsize=12)
-                ax_combo_pmax.set_ylabel('Potencia Pmax [W]', fontsize=14)
+                ax_combo_pmax.set_ylabel('Pmax Power [W]', fontsize=14)
                 ax_combo_pmax.grid(True, alpha=0.3)
-                ax_combo_pmax.set_title('Potencia y Corriente Diarias - IV600', fontsize=18)
+                ax_combo_pmax.set_title('Daily Power and Current - IV600', fontsize=18)
                 ax_combo_pmax.tick_params(axis='both', labelsize=12)
                 
                 # Subplot inferior: Corriente
@@ -282,8 +282,8 @@ def run_analysis():
                                                    label=f'Isc {module_name}', markersize=4, color=color)
                 
                 ax_combo_isc.legend(fontsize=12)
-                ax_combo_isc.set_ylabel('Corriente Isc [A]', fontsize=14)
-                ax_combo_isc.set_xlabel('Fecha', fontsize=14)
+                ax_combo_isc.set_ylabel('Isc Current [A]', fontsize=14)
+                ax_combo_isc.set_xlabel('Date', fontsize=14)
                 ax_combo_isc.grid(True, alpha=0.3)
                 ax_combo_isc.tick_params(axis='both', labelsize=12)
                 plt.xticks(rotation=30, ha='right', fontsize=12)
@@ -388,10 +388,10 @@ def run_analysis():
         
         if plot_legend1:
             ax1.legend(plot_legend1, fontsize=14)
-            ax1.set_ylabel('Soiling Ratio Pmp [%]', fontsize=16)
-            ax1.set_xlabel('Fecha', fontsize=16)
+            ax1.set_ylabel('Pmp Soiling Ratio [%]', fontsize=16)
+            ax1.set_xlabel('Date', fontsize=16)
             ax1.grid(True)
-            ax1.set_title('Soiling Ratios Pmp - IV600 (Filtrado 93-101%)', fontsize=20)
+            ax1.set_title('Pmp Soiling Ratios - IV600 (Filtered 93-101%)', fontsize=20)
             ax1.set_ylim(90, 110)
             ax1.tick_params(axis='both', labelsize=16)
             plt.xticks(rotation=30, ha='right', fontsize=16)
@@ -415,10 +415,10 @@ def run_analysis():
         
         if plot_legend2:
             ax2.legend(plot_legend2, fontsize=14)
-            ax2.set_ylabel('Soiling Ratio Isc [%]', fontsize=16)
-            ax2.set_xlabel('Fecha', fontsize=16)
+            ax2.set_ylabel('Isc Soiling Ratio [%]', fontsize=16)
+            ax2.set_xlabel('Date', fontsize=16)
             ax2.grid(True)
-            ax2.set_title('Soiling Ratios Isc - IV600 (Filtrado 93-101%)', fontsize=20)
+            ax2.set_title('Isc Soiling Ratios - IV600 (Filtered 93-101%)', fontsize=20)
             ax2.set_ylim(90, 110)
             ax2.tick_params(axis='both', labelsize=16)
             plt.xticks(rotation=30, ha='right', fontsize=16)
@@ -442,10 +442,10 @@ def run_analysis():
         
         if plot_legend3:
             ax3.legend(plot_legend3, fontsize=14)
-            ax3.set_ylabel('Soiling Ratio Pmp [%]', fontsize=16)
-            ax3.set_xlabel('Fecha', fontsize=16)
+            ax3.set_ylabel('Pmp Soiling Ratio [%]', fontsize=16)
+            ax3.set_xlabel('Date', fontsize=16)
             ax3.grid(True)
-            ax3.set_title('Soiling Ratios Pmp - IV600 (Semanal, Filtrado 93-101%)', fontsize=20)
+            ax3.set_title('Pmp Soiling Ratios - IV600 (Weekly, Filtered 93-101%)', fontsize=20)
             ax3.set_ylim(90, 110)
             ax3.tick_params(axis='both', labelsize=16)
             plt.xticks(rotation=30, ha='right', fontsize=16)
@@ -469,10 +469,10 @@ def run_analysis():
         
         if plot_legend4:
             ax4.legend(plot_legend4, fontsize=14)
-            ax4.set_ylabel('Soiling Ratio Isc [%]', fontsize=16)
-            ax4.set_xlabel('Fecha', fontsize=16)
+            ax4.set_ylabel('Isc Soiling Ratio [%]', fontsize=16)
+            ax4.set_xlabel('Date', fontsize=16)
             ax4.grid(True)
-            ax4.set_title('Soiling Ratios Isc - IV600 (Semanal Q25, Filtrado 90-105%)', fontsize=20)
+            ax4.set_title('Isc Soiling Ratios - IV600 (Weekly Q25, Filtered 90-105%)', fontsize=20)
             ax4.set_ylim(90, 110)
             ax4.tick_params(axis='both', labelsize=16)
             plt.xticks(rotation=30, ha='right', fontsize=16)
@@ -509,9 +509,9 @@ def run_analysis():
         
             ax5.legend(fontsize=14)
             ax5.set_ylabel('Soiling Ratio [%]', fontsize=16)
-            ax5.set_xlabel('Fecha', fontsize=16)
+            ax5.set_xlabel('Date', fontsize=16)
             ax5.grid(True)
-            ax5.set_title('Comparación SR Pmp vs Isc (1MD434/1MD439) - IV600 (Filtrado 93-101%)', fontsize=20)
+            ax5.set_title('Pmp vs Isc SR Comparison (1MD434/1MD439) - IV600 (Filtered 93-101%)', fontsize=20)
             ax5.set_ylim(90, 110)
             ax5.tick_params(axis='both', labelsize=16)
             plt.xticks(rotation=30, ha='right', fontsize=16)
@@ -548,9 +548,9 @@ def run_analysis():
         
             ax6.legend(fontsize=14)
             ax6.set_ylabel('Soiling Ratio [%]', fontsize=16)
-            ax6.set_xlabel('Fecha', fontsize=16)
+            ax6.set_xlabel('Date', fontsize=16)
             ax6.grid(True)
-            ax6.set_title('Comparación SR Pmp vs Isc (1MD434/1MD439) - IV600 (Semanal Q25, Filtrado 93-101%)', fontsize=20)
+            ax6.set_title('Pmp vs Isc SR Comparison (1MD434/1MD439) - IV600 (Weekly Q25, Filtered 93-101%)', fontsize=20)
             ax6.set_ylim(90, 110)
             ax6.tick_params(axis='both', labelsize=16)
             plt.xticks(rotation=30, ha='right', fontsize=16)
@@ -643,7 +643,7 @@ def run_analysis():
         # Configurar gráfico
         ax7.legend(fontsize=12, loc='upper right')
         ax7.set_ylabel('Soiling Ratio [%]', fontsize=16)
-        ax7.set_xlabel('Fecha', fontsize=16)
+        ax7.set_xlabel('Date', fontsize=16)
         ax7.grid(True, alpha=0.3)
         ax7.set_title('SR Pmp & Isc - IV600', fontsize=18)
         ax7.set_ylim(90, 110)
@@ -682,7 +682,7 @@ def run_analysis():
         # Configurar gráfico
         ax8.legend(fontsize=12, loc='upper right')
         ax8.set_ylabel('Soiling Ratio [%]', fontsize=16)
-        ax8.set_xlabel('Fecha', fontsize=16)
+        ax8.set_xlabel('Date', fontsize=16)
         ax8.grid(True, alpha=0.3)
         ax8.set_title('SR Pmp & Isc - IV600 Q25', fontsize=18)
         ax8.set_ylim(90, 110)
@@ -733,7 +733,7 @@ def run_analysis():
         # Configurar gráfico
         ax9.legend(fontsize=12, loc='upper right')
         ax9.set_ylabel('Soiling Ratio [%]', fontsize=16)
-        ax9.set_xlabel('Fecha', fontsize=16)
+        ax9.set_xlabel('Date', fontsize=16)
         ax9.grid(True, alpha=0.3)
         ax9.set_title('SR Pmp & Isc - IV600 Q25', fontsize=18)
         ax9.set_ylim(90, 110)
@@ -768,14 +768,14 @@ def run_analysis():
             
             # Plotear con líneas de tendencia
             stats_pmp_q25 = plot_with_trend_line(ax_q25, sr_pmp_q25_filtered, 
-                                                'Pmp SR Diario Q25', '#1f77b4', '-o')
+                                                'Pmp SR Daily Q25', '#1f77b4', '-o')
             stats_isc_q25 = plot_with_trend_line(ax_q25, sr_isc_q25_filtered, 
-                                                'Isc SR Diario Q25', '#ff7f0e', '-o')
+                                                'Isc SR Daily Q25', '#ff7f0e', '-o')
         
             # Configurar gráfico
             ax_q25.legend(fontsize=12, loc='upper right')
             ax_q25.set_ylabel('Soiling Ratio [%]', fontsize=16)
-            ax_q25.set_xlabel('Fecha', fontsize=16)
+            ax_q25.set_xlabel('Date', fontsize=16)
             ax_q25.grid(True, alpha=0.3)
             ax_q25.set_title('SR Pmp & Isc - IV600 Q25', fontsize=18)
             ax_q25.set_ylim(90, 110)
@@ -825,7 +825,7 @@ def run_analysis():
         # Configurar gráfico
             ax11.legend(fontsize=12, loc='upper right')
             ax11.set_ylabel('Soiling Ratio [%]', fontsize=16)
-            ax11.set_xlabel('Fecha', fontsize=16)
+            ax11.set_xlabel('Date', fontsize=16)
             ax11.grid(True, alpha=0.3)
             ax11.set_title('SR Pmp & Isc - IV600', fontsize=18)
             ax11.set_ylim(90, 110)

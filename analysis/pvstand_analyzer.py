@@ -129,18 +129,25 @@ def analyze_pvstand_data(
     if os.path.exists(pv_iv_data_filepath):
         logger.info("Cargando datos PVStand IV...")
         try:
-            use_cols_iv = ['_time', '_measurement', 'Imax', 'Pmax', 'Umax']
-            df_pvstand_raw_data = pd.read_csv(
-                pv_iv_data_filepath, 
-                usecols=lambda c: c in use_cols_iv or c.startswith('_time')
-            )
+            # Leer el archivo completo primero para detectar la estructura
+            df_pvstand_raw_data = pd.read_csv(pv_iv_data_filepath)
+            logger.info(f"Columnas encontradas en archivo IV: {df_pvstand_raw_data.columns.tolist()}")
             
-            time_col_actual = [col for col in df_pvstand_raw_data.columns if col.startswith('_time')]
+            # Detectar columna de tiempo
+            time_col_actual = None
+            for col in df_pvstand_raw_data.columns:
+                if col.lower() in ['_time', 'timestamp', 'time']:
+                    time_col_actual = col
+                    break
+            
             if not time_col_actual:
-                logger.error("No se encontró la columna '_time' (o variante) en los datos IV de PVStand.")
-                return False # Error fatal si no hay columna de tiempo
-            if time_col_actual[0] != '_time':
-                df_pvstand_raw_data.rename(columns={time_col_actual[0]: '_time'}, inplace=True)
+                logger.error("No se encontró columna de tiempo en los datos IV de PVStand.")
+                return False
+            
+            # Renombrar columna de tiempo a _time para consistencia
+            if time_col_actual != '_time':
+                df_pvstand_raw_data.rename(columns={time_col_actual: '_time'}, inplace=True)
+                logger.info(f"Columna de tiempo '{time_col_actual}' renombrada a '_time'")
 
             df_pvstand_raw_data['_time'] = pd.to_datetime(
                 df_pvstand_raw_data['_time'], 
@@ -160,18 +167,16 @@ def analyze_pvstand_data(
             
             logger.info(f"Zona horaria del índice PVStand asegurada a UTC: {df_pvstand_raw_data.index.tz}")
 
+            # Guardar copia de datos originales para gráfico de potencias brutas (antes de filtros)
+            df_pvstand_original_unfiltered = df_pvstand_raw_data.copy()
+            logger.info(f"Datos originales guardados para gráfico de potencias brutas: {len(df_pvstand_original_unfiltered)} filas.")
+
             if '_measurement' in df_pvstand_raw_data.columns:
                 logger.info("Pivotando datos PVStand IV por '_measurement'...")
                 values_to_pivot = [col for col in ['Imax', 'Pmax', 'Umax'] if col in df_pvstand_raw_data.columns]
                 if not values_to_pivot:
                     logger.error("Ninguna de las columnas de valores (Imax, Pmax, Umax) encontradas para pivotar.")
                     return False # No se puede continuar sin estas columnas
-                
-                # Asegurar que el índice es único antes de pivotar.
-                # Si hay duplicados en (_time, _measurement), pivot_table puede fallar o dar resultados inesperados.
-                # Una forma es agrupar y tomar el primero/media, pero esto debe ser una decisión consciente.
-                # Por ahora, se asume que el preprocesamiento de InfluxDB debe generar datos únicos por (_time, _measurement) para las métricas.
-                # df_pvstand_raw_data = df_pvstand_raw_data.loc[~df_pvstand_raw_data.index.duplicated(keep='first')] # Ejemplo si se necesita
                 
                 df_pvstand_pivot = df_pvstand_raw_data.pivot_table(
                     index=df_pvstand_raw_data.index, 
@@ -181,8 +186,47 @@ def analyze_pvstand_data(
                 df_pvstand_pivot.columns = [f'{col[1]}_{col[0]}' for col in df_pvstand_pivot.columns]
                 df_pvstand_raw_data = df_pvstand_pivot # Ahora df_pvstand_raw_data es el pivotado
                 logger.info(f"Datos PVStand IV pivotados. {len(df_pvstand_raw_data)} filas. Columnas ejemplo: {df_pvstand_raw_data.columns[:5].tolist()}...")
+                
+                # También pivotar los datos originales para el gráfico de potencias brutas
+                if '_measurement' in df_pvstand_original_unfiltered.columns:
+                    df_pvstand_original_pivot = df_pvstand_original_unfiltered.pivot_table(
+                        index=df_pvstand_original_unfiltered.index, 
+                        columns='_measurement', 
+                        values=values_to_pivot
+                    )
+                    df_pvstand_original_pivot.columns = [f'{col[1]}_{col[0]}' for col in df_pvstand_original_pivot.columns]
+                    df_pvstand_original_unfiltered = df_pvstand_original_pivot
+                    logger.info(f"Datos originales pivotados para gráfico de potencias brutas: {len(df_pvstand_original_unfiltered)} filas.")
+            elif 'module' in df_pvstand_raw_data.columns:
+                logger.info("Pivotando datos PVStand IV por columna 'module'...")
+                # Formato: timestamp, module, pmax, imax, umax
+                # Necesitamos pivotar por module
+                values_to_pivot = [col for col in ['imax', 'pmax', 'umax'] if col in df_pvstand_raw_data.columns]
+                if not values_to_pivot:
+                    logger.error("Ninguna de las columnas de valores (imax, pmax, umax) encontradas para pivotar.")
+                    return False
+                
+                df_pvstand_pivot = df_pvstand_raw_data.pivot_table(
+                    index=df_pvstand_raw_data.index, 
+                    columns='module', 
+                    values=values_to_pivot
+                )
+                # Renombrar columnas para consistencia: module_metric -> module_Metric
+                df_pvstand_pivot.columns = [f'{col[1]}_{col[0].capitalize()}' for col in df_pvstand_pivot.columns]
+                df_pvstand_raw_data = df_pvstand_pivot
+                logger.info(f"Datos PVStand IV pivotados por module. {len(df_pvstand_raw_data)} filas. Columnas: {df_pvstand_raw_data.columns.tolist()}")
+                
+                # También pivotar los datos originales para el gráfico de potencias brutas
+                df_pvstand_original_pivot = df_pvstand_original_unfiltered.pivot_table(
+                    index=df_pvstand_original_unfiltered.index, 
+                    columns='module', 
+                    values=values_to_pivot
+                )
+                df_pvstand_original_pivot.columns = [f'{col[1]}_{col[0].capitalize()}' for col in df_pvstand_original_pivot.columns]
+                df_pvstand_original_unfiltered = df_pvstand_original_pivot
+                logger.info(f"Datos originales pivotados para gráfico de potencias brutas: {len(df_pvstand_original_unfiltered)} filas.")
             else:
-                logger.warning("Columna '_measurement' no encontrada. No se puede pivotar. Se continuará con las columnas existentes, esto puede no ser lo esperado.")
+                logger.warning("No se encontró columna '_measurement' ni 'module' para pivotar. Se continuará con las columnas existentes.")
 
             # Filtrado por rango de fechas Y horas diarias (después de asegurar UTC)
             # Primero filtro por rango de fechas global
@@ -370,14 +414,14 @@ def analyze_pvstand_data(
             if denom_isc.count() > 0:
                 sr_isc_calc_raw = isc_soiled_filtered.div(denom_isc)
                 
-                # Aplicar filtro variable por fecha: 102% para ago-sep, 100% para oct en adelante
+                # Aplicar filtro variable por fecha: 101% para ago-sep, 100% para oct en adelante
                 early_months_cutoff = pd.Timestamp('2024-10-01', tz='UTC')
                 early_mask = sr_isc_calc_raw.index < early_months_cutoff
                 late_mask = sr_isc_calc_raw.index >= early_months_cutoff
                 
-                # Filtro para primeros meses (ago-sep): hasta 102%
+                # Filtro para primeros meses (ago-sep): hasta 101%
                 sr_isc_early = sr_isc_calc_raw[early_mask]
-                sr_isc_early_filtered = sr_isc_early[(sr_isc_early.notna()) & (sr_isc_early >= sr_min_filter_threshold) & (sr_isc_early <= 1.02)]
+                sr_isc_early_filtered = sr_isc_early[(sr_isc_early.notna()) & (sr_isc_early >= sr_min_filter_threshold) & (sr_isc_early <= 1.01)]
                 
                 # Filtro para meses posteriores (oct en adelante): hasta 100%
                 sr_isc_late = sr_isc_calc_raw[late_mask]
@@ -387,7 +431,7 @@ def analyze_pvstand_data(
                 sr_isc_filtered = pd.concat([sr_isc_early_filtered, sr_isc_late_filtered]).sort_index()
                 
                 sr_isc_pvstand_raw_no_offset = (100 * sr_isc_filtered).rename("SR_Isc_Uncorrected_Raw_NoOffset")
-                logger.info(f"SR Isc (sin corregir, raw) calculado: {len(sr_isc_pvstand_raw_no_offset)} puntos válidos. Filtro variable: ≤102% (ago-sep), ≤100% (oct+)")
+                logger.info(f"SR Isc (sin corregir, raw) calculado: {len(sr_isc_pvstand_raw_no_offset)} puntos válidos. Filtro variable: ≤101% (ago-sep), ≤100% (oct+)")
         else: logger.warning(f"Columnas faltantes para SR Isc sin corregir: {col_isc_soiled} o {col_isc_reference}")
 
         if col_pmax_soiled in df_pvstand_resampled.columns and col_pmax_reference in df_pvstand_resampled.columns:
@@ -411,14 +455,14 @@ def analyze_pvstand_data(
             if denom_pmax.count() > 0:
                 sr_pmax_calc_raw = pmax_soiled_filtered.div(denom_pmax)
                 
-                # Aplicar filtro variable por fecha: 102% para ago-sep, 100% para oct en adelante
+                # Aplicar filtro variable por fecha: 101% para ago-sep, 100% para oct en adelante
                 early_months_cutoff = pd.Timestamp('2024-10-01', tz='UTC')
                 early_mask = sr_pmax_calc_raw.index < early_months_cutoff
                 late_mask = sr_pmax_calc_raw.index >= early_months_cutoff
                 
-                # Filtro para primeros meses (ago-sep): hasta 102%
+                # Filtro para primeros meses (ago-sep): hasta 101%
                 sr_pmax_early = sr_pmax_calc_raw[early_mask]
-                sr_pmax_early_filtered = sr_pmax_early[(sr_pmax_early.notna()) & (sr_pmax_early >= sr_min_filter_threshold) & (sr_pmax_early <= 1.02)]
+                sr_pmax_early_filtered = sr_pmax_early[(sr_pmax_early.notna()) & (sr_pmax_early >= sr_min_filter_threshold) & (sr_pmax_early <= 1.01)]
                 
                 # Filtro para meses posteriores (oct en adelante): hasta 100%
                 sr_pmax_late = sr_pmax_calc_raw[late_mask]
@@ -428,7 +472,7 @@ def analyze_pvstand_data(
                 sr_pmax_filtered = pd.concat([sr_pmax_early_filtered, sr_pmax_late_filtered]).sort_index()
                 
                 sr_pmax_pvstand_raw_no_offset = (100 * sr_pmax_filtered).rename("SR_Pmax_Uncorrected_Raw_NoOffset")
-                logger.info(f"SR Pmax (sin corregir, raw, ANTES de offset) calculado: {len(sr_pmax_pvstand_raw_no_offset)} puntos válidos. Filtro variable: ≤102% (ago-sep), ≤100% (oct+)")
+                logger.info(f"SR Pmax (sin corregir, raw, ANTES de offset) calculado: {len(sr_pmax_pvstand_raw_no_offset)} puntos válidos. Filtro variable: ≤101% (ago-sep), ≤100% (oct+)")
         else: logger.warning(f"Columnas faltantes para SR Pmax sin corregir: {col_pmax_soiled} o {col_pmax_reference}")
     else:
         logger.warning("PVStand IV remuestreado está vacío. No se pueden calcular SRs sin corrección.")
@@ -520,14 +564,14 @@ def analyze_pvstand_data(
                 denom_isc_c = isc_ref_corr_filtered.replace(0, np.nan)
                 if denom_isc_c.count() > 0:
                     sr_isc_c_calc_raw = isc_soiled_corr_filtered.div(denom_isc_c)
-                    # Aplicar filtro variable por fecha: 102% para ago-sep, 100% para oct en adelante
+                    # Aplicar filtro variable por fecha: 101% para ago-sep, 100% para oct en adelante
                     early_months_cutoff = pd.Timestamp('2024-10-01', tz='UTC')
                     early_mask = sr_isc_c_calc_raw.index < early_months_cutoff
                     late_mask = sr_isc_c_calc_raw.index >= early_months_cutoff
                     
-                    # Filtro para primeros meses (ago-sep): hasta 102%
+                    # Filtro para primeros meses (ago-sep): hasta 101%
                     sr_isc_c_early = sr_isc_c_calc_raw[early_mask]
-                    sr_isc_c_early_filtered = sr_isc_c_early[(sr_isc_c_early.notna()) & (sr_isc_c_early >= sr_min_filter_threshold) & (sr_isc_c_early <= 1.02)]
+                    sr_isc_c_early_filtered = sr_isc_c_early[(sr_isc_c_early.notna()) & (sr_isc_c_early >= sr_min_filter_threshold) & (sr_isc_c_early <= 1.01)]
                     
                     # Filtro para meses posteriores (oct en adelante): hasta 100%
                     sr_isc_c_late = sr_isc_c_calc_raw[late_mask]
@@ -559,14 +603,14 @@ def analyze_pvstand_data(
                 denom_pmax_c = pmax_ref_corr_filtered.replace(0, np.nan)
                 if denom_pmax_c.count() > 0:
                     sr_pmax_c_calc_raw = pmax_soiled_corr_filtered.div(denom_pmax_c)
-                    # Aplicar filtro variable por fecha: 102% para ago-sep, 100% para oct en adelante
+                    # Aplicar filtro variable por fecha: 101% para ago-sep, 100% para oct en adelante
                     early_months_cutoff = pd.Timestamp('2024-10-01', tz='UTC')
                     early_mask = sr_pmax_c_calc_raw.index < early_months_cutoff
                     late_mask = sr_pmax_c_calc_raw.index >= early_months_cutoff
                     
-                    # Filtro para primeros meses (ago-sep): hasta 102%
+                    # Filtro para primeros meses (ago-sep): hasta 101%
                     sr_pmax_c_early = sr_pmax_c_calc_raw[early_mask]
-                    sr_pmax_c_early_filtered = sr_pmax_c_early[(sr_pmax_c_early.notna()) & (sr_pmax_c_early >= sr_min_filter_threshold) & (sr_pmax_c_early <= 1.02)]
+                    sr_pmax_c_early_filtered = sr_pmax_c_early[(sr_pmax_c_early.notna()) & (sr_pmax_c_early >= sr_min_filter_threshold) & (sr_pmax_c_early <= 1.01)]
                     
                     # Filtro para meses posteriores (oct en adelante): hasta 100%
                     sr_pmax_c_late = sr_pmax_c_calc_raw[late_mask]
@@ -585,7 +629,7 @@ def analyze_pvstand_data(
                         logger.info(f"Filtrados picos anómalos en SR Pmax corregido usando rolling median. Datos restantes: {len(sr_pmax_c_filtered)}")
                     
                     sr_pmax_pvstand_corrected_raw_no_offset = (100 * sr_pmax_c_filtered).rename("SR_Pmax_Corrected_Raw_NoOffset")
-                    logger.info(f"SR Pmax (corregido, raw, ANTES de offset) calculado: {len(sr_pmax_pvstand_corrected_raw_no_offset)} puntos válidos. Filtro variable: ≤102% (ago-sep), ≤100% (oct+)")
+                    logger.info(f"SR Pmax (corregido, raw, ANTES de offset) calculado: {len(sr_pmax_pvstand_corrected_raw_no_offset)} puntos válidos. Filtro variable: ≤101% (ago-sep), ≤100% (oct+)")
             else:
                 missing_actual = [c for c in required_cols_corr if c not in df_merged_for_corr.columns]
                 logger.warning(f"Columnas faltantes en df_merged_for_corr para SR corregido: {missing_actual}. No se calcularán SRs corregidos.")
@@ -707,6 +751,68 @@ def analyze_pvstand_data(
         df_sr_to_save_raw.to_csv(csv_filename_raw)
         logger.info(f"PVStand SRs (raw, sin offset) guardados en: {csv_filename_raw}")
 
+    # --- Gráfico de Potencias Brutas (Sin filtros ni promedios) ---
+    def _plot_raw_power_data(df_raw_power_data, output_dir, save_figs, show_figs):
+        """
+        Genera gráfico de potencias brutas sin filtros ni promedios.
+        Muestra los datos tal como están en el archivo original.
+        """
+        if df_raw_power_data.empty:
+            logger.info("No hay datos de potencias brutas para graficar.")
+            return
+            
+        logger.info("Generando gráfico de potencias brutas (sin filtros)...")
+        
+        # Identificar columnas de potencia
+        pmax_cols = [col for col in df_raw_power_data.columns if 'Pmax' in col]
+        if not pmax_cols:
+            logger.warning("No se encontraron columnas de Pmax para el gráfico de potencias brutas.")
+            return
+            
+        fig, ax = plt.subplots(figsize=(20, 10))
+        
+        # Colores para cada serie
+        colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
+        
+        for i, col in enumerate(pmax_cols):
+            data_series = df_raw_power_data[col].dropna()
+            if not data_series.empty:
+                ax.plot(data_series.index, data_series.values, 
+                       color=colors[i % len(colors)], 
+                       alpha=0.7, 
+                       linewidth=0.5,
+                       label=col.replace('_', ' '))
+        
+        ax.set_title('Potencias Brutas PVStand (Datos Originales - Sin Filtros)', fontsize=16, fontweight='bold')
+        ax.set_ylabel('Potencia [W]', fontsize=14)
+        ax.set_xlabel('Fecha', fontsize=14)
+        ax.grid(True, alpha=0.3)
+        ax.legend(loc='best', fontsize=12)
+        
+        # Formatear fechas en eje x
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+        ax.tick_params(axis='both', labelsize=12)
+        plt.xticks(rotation=45, ha='right')
+        
+        # Ajustar límites del eje y para mejor visualización
+        y_max = df_raw_power_data[pmax_cols].max().max()
+        if y_max > 0:
+            ax.set_ylim(0, y_max * 1.1)
+            
+        plt.tight_layout()
+        
+        # Guardar gráfico
+        plot_filename = "pvstand_potencias_brutas_sin_filtros.png"
+        if save_figs:
+            save_plot_matplotlib(fig, plot_filename, output_dir, subfolder=None)
+            logger.info(f"Gráfico de potencias brutas guardado: {plot_filename}")
+        
+        if show_figs:
+            plt.show(block=True)
+            logger.info("Gráfico de potencias brutas mostrado")
+        else:
+            plt.close(fig)
+
     # --- Graficado (Lógica de _plot_sr_section incorporada) ---
     # Colores fijos por posición para todos los gráficos
     colores_fijos = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728']
@@ -822,6 +928,13 @@ def analyze_pvstand_data(
                      "PVStand SRs (Raw, Sin Offset)", 
                      "raw_no_offset", 
                      is_normalized_section_flag_param=False)
+
+    # --- Generar gráfico de potencias brutas ---
+    if 'df_pvstand_original_unfiltered' in locals() and not df_pvstand_original_unfiltered.empty:
+        logger.info("Generando gráfico de potencias brutas (datos originales sin filtros)...")
+        _plot_raw_power_data(df_pvstand_original_unfiltered, graph_base_plus_subdir, save_figures_setting, show_figures_setting)
+    else:
+        logger.warning("No hay datos originales disponibles para el gráfico de potencias brutas.")
 
     # --- Generar Excel consolidado con datos procesados (mismo procesamiento que gráficos) ---
     logger.info("Generando Excel consolidado con datos agregados...")

@@ -23,10 +23,20 @@ from analysis.ref_cells_analyzer import run_analysis as run_ref_cells
 from analysis.pvstand_analyzer import run_analysis as run_pvstand
 from analysis.pvstand_analyzer_solar_noon import run_analysis_solar_noon as run_pvstand_solar_noon
 from analysis.pv_glasses_analyzer import run_analysis as run_pv_glasses
+from analysis.pv_glasses_analyzer_q25 import ejecutar_analisis_pv_glasses_q25
 from analysis.calendar_analyzer import run_analysis as run_calendar
 from analysis.analisis_iv600_fixed import run_analysis as run_iv600_filtrado
-from analysis.consolidated_weekly_q25_plot import create_consolidated_weekly_q25_plot, create_synchronized_weekly_q25_plot
+from analysis.consolidated_weekly_q25_plot import create_consolidated_weekly_q25_plot, create_synchronized_weekly_q25_plot, create_consolidated_weekly_q25_plot_oct_mar
 from analysis.statistical_deviation_analyzer import run_analysis as run_statistical_deviation
+
+def run_pv_glasses_q25():
+    """Wrapper para el análisis PV Glasses Q25 compatible con el menú principal."""
+    try:
+        ejecutar_analisis_pv_glasses_q25()
+        return True
+    except Exception as e:
+        logger.error(f"Error en análisis PV Glasses Q25: {e}")
+        return False
 
 # Diccionario de opciones: {número: (nombre, función)}
 ANALYSIS_OPTIONS = {
@@ -36,10 +46,12 @@ ANALYSIS_OPTIONS = {
     4: ("PVStand", run_pvstand),
     5: ("PVStand - Mediodía Solar", run_pvstand_solar_noon),
     6: ("PV Glasses", run_pv_glasses),
+    14: ("PV Glasses Q25 (Cuantil 25)", run_pv_glasses_q25),
     7: ("Calendario", run_calendar),
     8: ("Análisis IV600 Filtrado (sin picos)", run_iv600_filtrado),
     9: ("Gráfico Consolidado Semanal Q25 (sin tendencia)", create_consolidated_weekly_q25_plot),
     13: ("Gráfico Consolidado Sincronizado Q25", create_synchronized_weekly_q25_plot),
+    15: ("Gráfico Consolidado Octubre 2024 - Marzo 2025", create_consolidated_weekly_q25_plot_oct_mar),
     12: ("Análisis de Desviaciones Estadísticas", run_statistical_deviation)
 }
 
@@ -145,6 +157,17 @@ def run_selected_analyses(selected: List[int]) -> Dict[str, Any]:
                     print("❌ No se pudo generar el gráfico consolidado sincronizado.")
             except Exception as e:
                 print(f"❌ Error generando gráfico consolidado sincronizado: {e}")
+            continue
+        elif num == 15:
+            print("\n🔍 Generando gráfico consolidado Octubre 2024 - Marzo 2025...")
+            try:
+                success = create_consolidated_weekly_q25_plot_oct_mar()
+                if success:
+                    print("✅ Gráfico consolidado Octubre-Marzo generado exitosamente.")
+                else:
+                    print("❌ No se pudo generar el gráfico consolidado Octubre-Marzo.")
+            except Exception as e:
+                print(f"❌ Error generando gráfico consolidado Octubre-Marzo: {e}")
             continue
         name, func = ANALYSIS_OPTIONS[num]
         print(f"\n🔍 Ejecutando análisis: {name}")

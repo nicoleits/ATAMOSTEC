@@ -170,8 +170,8 @@ def analyze_dustiq_data(
             end_date_for_xlim = min(max_available_date, pd.Timestamp('2025-12-31'))
             ax1.set_xlim([start_date_for_xlim, end_date_for_xlim])
             ax1.set_ylabel('Soiling Ratio [%]')
-            ax1.set_xlabel('Semana')
-            ax1.set_title(f'Soiling Ratio Semanal Q25 - DustIQ (franjas horarias fijas)')
+            ax1.set_xlabel('Week')
+            ax1.set_title(f'Weekly Q25 Soiling Ratio - DustIQ (fixed time slots)')
             ax1.grid(True)
             plt.tight_layout()
             if save_figures:
@@ -223,8 +223,8 @@ def analyze_dustiq_data(
             # Establecer límites del eje x dinámicamente
             ax1_4.set_xlim([start_date_for_xlim, end_date_for_xlim])
             ax1_4.set_ylabel('Soiling Ratio [%]')
-            ax1_4.set_xlabel('Semana')
-            ax1_4.set_title(f'Soiling Ratio Semanal Q25 - DustIQ (franja horaria fija)')
+            ax1_4.set_xlabel('Week')
+            ax1_4.set_title(f'Weekly Q25 Soiling Ratio - DustIQ (fixed time slot)')
             ax1_4.grid(True)
             plt.tight_layout()
             if save_figures:
@@ -286,10 +286,10 @@ def analyze_dustiq_data(
                         ax1_5.plot(x, y, 'o-', alpha=0.75, label=f'{label}', color=color, markersize=3)
                         x_valid = x[valid_mask]
                         ax1_5.plot(x_valid, p(x_clean), '--', alpha=0.7, 
-                                  label=f'Trend: {z[0]*7:.3f}[%/sem], R²={r2:.3f}', color=color, linewidth=2)
+                                  label=f'Trend: {z[0]*7:.3f}[%/week], R²={r2:.3f}', color=color, linewidth=2)
                     else:
                         # Si no hay suficientes datos válidos, graficar solo los datos
-                        ax1_5.plot(x, y, 'o-', alpha=0.75, label=f'{label} (Sin tendencia)', color=color, markersize=3)
+                        ax1_5.plot(x, y, 'o-', alpha=0.75, label=f'{label} (No trend)', color=color, markersize=3)
             
             # Eje x: solo meses y años
             ax1_5.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
@@ -299,8 +299,8 @@ def analyze_dustiq_data(
             # Establecer límites del eje x dinámicamente
             ax1_5.set_xlim([start_date_for_xlim, end_date_for_xlim])
             ax1_5.set_ylabel('Soiling Ratio [%]')
-            ax1_5.set_xlabel('Semana')
-            ax1_5.set_title(f'Soiling Ratio Q25 - DustIQ (Franjas Horarias)')
+            ax1_5.set_xlabel('Week')
+            ax1_5.set_title(f'Q25 Soiling Ratio - DustIQ (Time Slots)')
             ax1_5.grid(True)
             plt.tight_layout()
             if save_figures:
@@ -341,9 +341,9 @@ def analyze_dustiq_data(
                 # Usar el primer color del ciclo de matplotlib
                 color = plt.rcParams['axes.prop_cycle'].by_key()['color'][0]
                 # Graficar datos SOLO con matplotlib
-                ax2.plot(x2, y2, 'o-', alpha=0.75, label='DustIQ Q25 Semanal (14-18h)', color=color, markersize=3)
+                ax2.plot(x2, y2, 'o-', alpha=0.75, label='DustIQ Q25 Weekly (14-18h)', color=color, markersize=3)
                 # Graficar línea de tendencia sobre los mismos puntos
-                ax2.plot(x2, p2(x2_num), '--', alpha=0.7, label=f'Trend= {z2[0]*7:.3f}[%/semana], R²={r2_2:.3f})', color=color)
+                ax2.plot(x2, p2(x2_num), '--', alpha=0.7, label=f'Trend= {z2[0]*7:.3f}[%/week], R²={r2_2:.3f})', color=color)
                 # Eje x: solo meses y años
                 ax2.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
                 plt.setp(ax2.get_xticklabels(), rotation=45, ha='right', fontsize=8)
@@ -353,8 +353,8 @@ def analyze_dustiq_data(
                 # Establecer límites del eje x dinámicamente
                 ax2.set_xlim([start_date_for_xlim, end_date_for_xlim])
                 ax2.set_ylabel('Soiling Ratio [%]')
-                ax2.set_xlabel('Semana')
-                ax2.set_title('Soiling Ratio Semanal Q25 DustIQ')
+                ax2.set_xlabel('Week')
+                ax2.set_title('Weekly Q25 Soiling Ratio DustIQ')
                 ax2.grid(True)
                 plt.tight_layout()
                 if save_figures:
@@ -428,8 +428,8 @@ def analyze_dustiq_data(
             # Establecer límites del eje x dinámicamente
             ax1_1.set_xlim([start_date_for_xlim, end_date_for_xlim])
             ax1_1.set_ylabel('Soiling Ratio [%]')
-            ax1_1.set_xlabel('Mes')
-            ax1_1.set_title(f'Soiling Ratio DustIQ Semanal - Mediodía Solar')
+            ax1_1.set_xlabel('Month')
+            ax1_1.set_title(f'Weekly DustIQ Soiling Ratio - Solar Noon')
             ax1_1.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
             plt.setp(ax1_1.get_xticklabels(), rotation=45, ha='right', fontsize=8)
             ax1_1.grid(True)
@@ -470,7 +470,7 @@ def analyze_dustiq_data(
                     logger.warning("G1.2 - No hay suficientes datos válidos para la regresión")
                     # Graficar solo los datos sin tendencia
                     ax1_2.plot(x1_2, y1_2, 'o-', alpha=0.75, label='Soiling Ratio Q25 (+/- 60 min)', color='blue', markersize=3)
-                    ax1_2.set_title(f'Soiling Ratio Diario Q25 Mediodía Solar (Sin Tendencia - Datos Insuficientes)')
+                    ax1_2.set_title(f'Daily Q25 Soiling Ratio Solar Noon (No Trend - Insufficient Data)')
                 else:
                     x1_2_clean = x1_2_num[valid_mask]
                     y1_2_clean = y1_2[valid_mask]
@@ -498,7 +498,7 @@ def analyze_dustiq_data(
                     # Graficar línea de tendencia solo para datos válidos
                     x1_2_valid = x1_2[valid_mask]
                     ax1_2.plot(x1_2_valid, p1_2(x1_2_clean), '--', alpha=0.7, 
-                              label=f'Tendencia: {z1_2[0]:.6f}[%/día], R²={r2_1_2:.3f}', color=color, linewidth=2)
+                              label=f'Trend: {z1_2[0]:.6f}[%/day], R²={r2_1_2:.3f}', color=color, linewidth=2)
                 
                 # Eje x: solo meses y años
                 ax1_2.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
@@ -509,8 +509,8 @@ def analyze_dustiq_data(
                 # Establecer límites del eje x dinámicamente
                 ax1_2.set_xlim([start_date_for_xlim, end_date_for_xlim])
                 ax1_2.set_ylabel('Soiling Ratio [%]')
-                ax1_2.set_xlabel('Fecha')
-                ax1_2.set_title(f'Soiling Ratio Diario Q25 Mediodía Solar')
+                ax1_2.set_xlabel('Date')
+                ax1_2.set_title(f'Daily Q25 Soiling Ratio Solar Noon')
                 ax1_2.grid(True)
                 plt.tight_layout()
                 save_plot_matplotlib(fig1_2, 'SR_DustIQ_PromedioDiario_MediodiaSolar_ConTendencia.png', output_graph_dir, subfolder=dustiq_graph_subdir)
@@ -540,16 +540,16 @@ def analyze_dustiq_data(
             sr_diario_slot1 = df_merged_g1_3[df_merged_g1_3['in_slot1']][sr_c11_col_name].resample('D').quantile(0.25)
             sr_diario_slot2 = df_merged_g1_3[df_merged_g1_3['in_slot2']][sr_c11_col_name].resample('D').quantile(0.25)
             sr_diario_slot3 = df_merged_g1_3[df_merged_g1_3['in_slot3']][sr_c11_col_name].resample('D').quantile(0.25)
-            ax1_3.plot(sr_diario_slot1.index, sr_diario_slot1.values, '-o', alpha=0.7, label='Q25 Diario Pre-Mediodía', color=colores[0], markersize=3)
-            ax1_3.plot(sr_diario_slot2.index, sr_diario_slot2.values, '-o', alpha=0.7, label='Q25 Diario Mediodía', color=colores[1], markersize=3)
-            ax1_3.plot(sr_diario_slot3.index, sr_diario_slot3.values, '-o', alpha=0.7, label='Q25 Diario Post-Mediodía', color=colores[2], markersize=3)
+            ax1_3.plot(sr_diario_slot1.index, sr_diario_slot1.values, '-o', alpha=0.7, label='Daily Q25 Pre-Noon', color=colores[0], markersize=3)
+            ax1_3.plot(sr_diario_slot2.index, sr_diario_slot2.values, '-o', alpha=0.7, label='Daily Q25 Noon', color=colores[1], markersize=3)
+            ax1_3.plot(sr_diario_slot3.index, sr_diario_slot3.values, '-o', alpha=0.7, label='Daily Q25 Post-Noon', color=colores[2], markersize=3)
             ax1_3.legend()
             ax1_3.set_ylim([90, 110])
             # Establecer límites del eje x dinámicamente
             ax1_3.set_xlim([start_date_for_xlim, end_date_for_xlim])
             ax1_3.set_ylabel('Soiling Ratio [%]')
-            ax1_3.set_xlabel('Fecha')
-            ax1_3.set_title(f'Soiling Ratio Diario Q25 Franjas Mediodía Solar')
+            ax1_3.set_xlabel('Date')
+            ax1_3.set_title(f'Daily Q25 Soiling Ratio Solar Noon Time Slots')
             ax1_3.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
             plt.setp(ax1_3.get_xticklabels(), rotation=45, ha='right', fontsize=8)
             ax1_3.grid(True)
@@ -596,9 +596,9 @@ def analyze_dustiq_data(
                 # Usar el primer color del ciclo de matplotlib
                 color = plt.rcParams['axes.prop_cycle'].by_key()['color'][0]
                 # Graficar datos SOLO con matplotlib
-                ax2_1.plot(x2_1, y2_1, 'o-', alpha=0.75, label='DustIQ Q25 Semanal', color=color, markersize=3)
+                ax2_1.plot(x2_1, y2_1, 'o-', alpha=0.75, label='DustIQ Q25 Weekly', color=color, markersize=3)
                 # Graficar línea de tendencia sobre los mismos puntos
-                ax2_1.plot(x2_1, p2_1(x2_1_num), '--', alpha=0.7, label=f'Trend= {z2_1[0]*7:.3f}[%/semana], R²={r2_2_1:.3f})', color=color)
+                ax2_1.plot(x2_1, p2_1(x2_1_num), '--', alpha=0.7, label=f'Trend= {z2_1[0]*7:.3f}[%/week], R²={r2_2_1:.3f})', color=color)
                 # Eje x: solo meses y años
                 ax2_1.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
                 plt.setp(ax2_1.get_xticklabels(), rotation=45, ha='right', fontsize=8)
@@ -609,8 +609,8 @@ def analyze_dustiq_data(
                 # Establecer límites del eje x dinámicamente
                 ax2_1.set_xlim([start_date_for_xlim, end_date_for_xlim])
                 ax2_1.set_ylabel('Soiling Ratio [%]')
-                ax2_1.set_xlabel('Semana')
-                ax2_1.set_title('Soiling Ratio DustIQ Semanal - Mediodía Solar')
+                ax2_1.set_xlabel('Week')
+                ax2_1.set_title('Weekly DustIQ Soiling Ratio - Solar Noon')
                 ax2_1.grid(True)
                 plt.tight_layout()
                 if save_figures:
