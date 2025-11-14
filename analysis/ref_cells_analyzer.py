@@ -176,6 +176,28 @@ def analyze_ref_cells_data(raw_data_filepath: str) -> bool:
         if not df_weekly_sr_q25.empty:
             df_weekly_sr_q25.to_csv(os.path.join(paths.REFCELLS_OUTPUT_SUBDIR_CSV, 'ref_cells_sr_semanal_q25.csv'))
 
+        # --- 8. Análisis de Incertidumbre de SR ---
+        logger.info("Iniciando análisis de incertidumbre de SR...")
+        try:
+            from analysis.sr_uncertainty import calculate_sr_uncertainty, save_uncertainty_results
+            
+            # Calcular incertidumbre usando los datos originales filtrados
+            uncertainty_results = calculate_sr_uncertainty(df_ref_cells)
+            
+            if uncertainty_results:
+                # Guardar resultados de incertidumbre
+                save_success = save_uncertainty_results(uncertainty_results)
+                if save_success:
+                    logger.info("Análisis de incertidumbre completado exitosamente")
+                else:
+                    logger.warning("Error guardando resultados de incertidumbre")
+            else:
+                logger.warning("No se obtuvieron resultados de incertidumbre")
+                
+        except Exception as e:
+            logger.error(f"Error en análisis de incertidumbre: {e}")
+            # Continuar con el resto del análisis aunque falle la incertidumbre
+
         # --- 8. Generación de Gráficos ---
         logger.info("Generando gráficos para Celdas de Referencia...")
         plt.style.use('seaborn-v0_8-whitegrid') # Estilo similar al notebook
@@ -849,7 +871,7 @@ def _analyze_cloudy_days_solar_noon(df_ref_cells: pd.DataFrame, ref_col: str, va
             
             # 1. Gráfico de clasificación temporal
             fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(15, 12))
-            
+            plt.rcParams["font.family"] = "Times New Roman"
             # Irradiancia promedio diaria
             dates = pd.to_datetime(daily_stats.index)
             colors_map = {'Despejado': '#2ca02c', 'Parcialmente_Nublado': '#ff7f0e', 'Nublado': '#d62728'}

@@ -28,6 +28,7 @@ from analysis.calendar_analyzer import run_analysis as run_calendar
 from analysis.analisis_iv600_fixed import run_analysis as run_iv600_filtrado
 from analysis.consolidated_weekly_q25_plot import create_consolidated_weekly_q25_plot, create_synchronized_weekly_q25_plot, create_consolidated_weekly_q25_plot_oct_mar
 from analysis.statistical_deviation_analyzer import run_analysis as run_statistical_deviation
+from analysis.sr_uncertainty import run_analysis as run_sr_uncertainty
 
 def run_pv_glasses_q25():
     """Wrapper para el análisis PV Glasses Q25 compatible con el menú principal."""
@@ -52,7 +53,8 @@ ANALYSIS_OPTIONS = {
     9: ("Gráfico Consolidado Semanal Q25 (sin tendencia)", create_consolidated_weekly_q25_plot),
     13: ("Gráfico Consolidado Sincronizado Q25", create_synchronized_weekly_q25_plot),
     15: ("Gráfico Consolidado Octubre 2024 - Marzo 2025", create_consolidated_weekly_q25_plot_oct_mar),
-    12: ("Análisis de Desviaciones Estadísticas", run_statistical_deviation)
+    12: ("Análisis de Desviaciones Estadísticas", run_statistical_deviation),
+    16: ("Análisis de Incertidumbre de SR", run_sr_uncertainty)
 }
 
 # Análisis que requieren preprocesamiento específico

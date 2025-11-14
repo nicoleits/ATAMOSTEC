@@ -13,6 +13,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 BASE_INPUT_DIR = os.path.join(PROJECT_ROOT, "datos")
 BASE_OUTPUT_GRAPH_DIR = os.path.join(PROJECT_ROOT, "graficos_analisis_integrado_py")
 BASE_OUTPUT_CSV_DIR = os.path.join(PROJECT_ROOT, "datos_procesados_analisis_integrado_py")
+BASE_OUTPUTS_DIR = os.path.join(PROJECT_ROOT, "outputs")
 
 # Alias para compatibilidad
 DATA_DIR = BASE_INPUT_DIR
@@ -83,3 +84,12 @@ DUSTIQ_OUTPUT_SUBDIR_GRAPH = os.path.join(BASE_OUTPUT_GRAPH_DIR, "dustiq")
 REFCELLS_OUTPUT_SUBDIR_GRAPH = os.path.join(BASE_OUTPUT_GRAPH_DIR, "ref_cells")
 SOILING_KIT_OUTPUT_SUBDIR_GRAPH = os.path.join(BASE_OUTPUT_GRAPH_DIR, "soiling_kit")
 CALENDAR_OUTPUT_SUBDIR_GRAPH = os.path.join(BASE_OUTPUT_GRAPH_DIR, "calendario")
+
+# ============================================================================
+# RUTAS DE SALIDA PARA ANÁLISIS DE INCERTIDUMBRE DE SR
+# ============================================================================
+
+# Archivos de salida de incertidumbre
+SR_DAILY_Q25_WITH_CI_FILE = os.path.join(BASE_OUTPUTS_DIR, "sr_daily_q25_with_ci.csv")
+SR_WEEKLY_Q25_WITH_CI_FILE = os.path.join(BASE_OUTPUTS_DIR, "sr_weekly_q25_with_ci.csv")
+SR_UNCERTAINTY_SUMMARY_FILE = os.path.join(BASE_OUTPUTS_DIR, "sr_uncertainty_summary.txt")
