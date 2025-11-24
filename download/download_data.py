@@ -45,7 +45,7 @@ El script guiará al usuario a través de:
 3. Configuración adicional según el tipo seleccionado (fotoceldas, horarios, etc.)
 
 Los datos descargados se guardan en CSV en el directorio configurado:
-    /home/atamos/atamostec/SR/SOILING/datos/
+    /home/atamos/atamostec/ATAMOSTEC/ATAMOSTEC/datos/
 
 NOTAS:
 ------
@@ -99,7 +99,7 @@ DEFAULT_START_DATE = pd.to_datetime('01/07/2024', dayfirst=True).tz_localize('UT
 DEFAULT_END_DATE = pd.to_datetime('31/12/2025', dayfirst=True).tz_localize('UTC')
 
 # Directorio de salida - ruta absoluta actualizada para el usuario actual
-OUTPUT_DIR = "/home/atamos/atamostec/SR/SOILING/datos"
+OUTPUT_DIR = "/home/atamos/atamostec/ATAMOSTEC/ATAMOSTEC/datos"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
