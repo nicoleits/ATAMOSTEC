@@ -254,6 +254,28 @@ STATISTICAL_DEVIATION_MIN_DATA_POINTS = 100        # Mínimo de datos para anál
 STATISTICAL_DEVIATION_DBSCAN_EPS = 0.5             # Parámetro eps para DBSCAN
 STATISTICAL_DEVIATION_DBSCAN_MIN_SAMPLES = 5       # Mínimo de muestras para DBSCAN
 
+# --- Configuraciones para Análisis de Incertidumbre de SR ---
+# Columnas de datos
+SOILED_COL = "1RC411(w.m-2)"          # Columna de celda sucia
+CLEAN_COL = "1RC412(w.m-2)"           # Columna de celda limpia
+
+# Filtros de SR
+SR_MIN = 80.0                         # Límite inferior de SR (%)
+SR_MAX = 105.0                        # Límite superior de SR (%)
+
+# Umbral de irradiancia
+MIN_IRRADIANCE = 200                  # Umbral mínimo de irradiancia (W/m²)
+
+# Parámetros de bootstrap por bloques
+BLOCK_SIZE_MIN = 10                   # Tamaño de bloque en minutos
+N_BOOT = 2000                         # Número de iteraciones bootstrap
+RNG_SEED = 42                         # Semilla para reproducibilidad
+
+# Incertidumbres de calibración (relativas)
+U_SOILED = 0.005                      # Incertidumbre relativa de celda sucia (0.5%)
+U_CLEAN = 0.005                       # Incertidumbre relativa de celda limpia (0.5%)
+RHO_K = 0.0                           # Correlación entre celdas (0 = independientes)
+
 # Configuración de formatos de tiempo
 DUSTIQ_TIME_COLUMN = 'Date&Time'
 DUSTIQ_TIME_FORMAT = '%Y-%m-%d %H:%M:%S' # Ejemplo, ajustar si es diferente
