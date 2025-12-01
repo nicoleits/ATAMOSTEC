@@ -1,0 +1,189 @@
+
+================================================================================
+📊 RESUMEN DE RESULTADOS DE INCERTIDUMBRE DE SR
+================================================================================
+Fecha de generación: 2025-11-28 12:54:03
+
+📊 RESUMEN DE DATOS DIARIOS
+--------------------------------------------------------------------------------
+Total de días: 360
+Rango de fechas: 2024-08-01 a 2025-08-25
+
+Incertidumbre diaria (k=2):
+  Mínima: 4.128%
+  Máxima: 15.300%
+  Promedio: 6.268%
+  Mediana: 5.826%
+  Desviación estándar: 2.175%
+
+SR diario (Q25):
+  Mínimo: 0.03%
+  Máximo: 106.00%
+  Promedio: 88.30%
+  Mediana: 97.83%
+
+Último día (2025-08-25):
+  SR: 98.71%
+  Incertidumbre: 4.739%
+  Intervalo 95%: [94.03%, 103.38%]
+  Minutos: 1,439
+
+📅 INCERTIDUMBRE POR PERÍODO MENSUAL
+--------------------------------------------------------------------------------
+Total de meses: 13
+Rango: 2024-08 a 2025-08
+
+Incertidumbre mensual (k=2):
+  Mínima: 4.633% (2025-07)
+  Máxima: 8.055% (2025-04)
+  Promedio: 5.936%
+  Mediana: 6.207%
+
+SR promedio mensual:
+  Mínimo: 95.78%
+  Máximo: 101.07%
+  Promedio: 97.91%
+
+Último mes (2025-08):
+  SR promedio: 98.09%
+  Incertidumbre: 4.807% ± 4.218%
+  Minutos: 14,657
+
+📋 Tabla completa por mes:
+Mes          U_k2 (%)     U_std (%)    SR (%)     Minutos     
+----------------------------------------------------------------------
+2024-08      4.775%       4.330%       101.07%         20,390
+2024-09      5.363%       5.972%       99.57%          19,890
+2024-10      6.292%       7.480%       99.81%          22,687
+2024-11      6.782%       7.817%       99.51%          23,039
+2024-12      7.002%       8.211%       96.72%          14,570
+2025-01      6.736%       7.779%       97.26%          19,312
+2025-02      6.207%       7.009%       96.95%          19,757
+2025-03      6.724%       7.791%       95.78%          14,226
+2025-04      8.055%       8.417%       96.75%           6,266
+2025-05      4.860%       4.085%       96.27%          11,384
+2025-06      4.933%       4.417%       97.43%          18,388
+2025-07      4.633%       3.572%       97.63%          18,900
+2025-08      4.807%       4.218%       98.09%          14,657
+
+📊 INCERTIDUMBRE POR RANGOS DE SR
+--------------------------------------------------------------------------------
+Muestra cómo varía la incertidumbre con el nivel de soiling.
+
+Rango SR             U_k2 (%)     U_std (%)    Minutos      % Total   
+---------------------------------------------------------------------------
+(-0.001, 80.0]       19.813%      12.795%            2,410 1.08%     
+(80.0, 90.0]         13.887%      11.764%              434 0.19%     
+(90.0, 95.0]         9.659%       11.211%           10,597 4.74%     
+(95.0, 100.0]        5.352%       5.916%           172,856 77.35%    
+(100.0, 105.0]       5.519%       4.777%            30,842 13.80%    
+(105.0, 200.0]       8.935%       4.887%             6,327 2.83%     
+
+Total de minutos: 223,466
+
+🔍 Observaciones:
+  Rango con MENOR incertidumbre: (95.0, 100.0] (5.352%)
+  Rango con MAYOR incertidumbre: (-0.001, 80.0] (19.813%)
+
+⏱️  DATOS MINUTALES (Estadísticas básicas)
+--------------------------------------------------------------------------------
+⚠️  Archivo muy grande. Analizando muestra aleatoria de 4,955 registros (~1%).
+Tamaño del archivo: 46.54 MB
+Total de registros (aprox.): 499,614
+Rango temporal (muestra): 2024-08-01 02:16:00+00:00 a 2025-08-24 22:30:00+00:00
+
+SR (muestra):
+  Promedio: 95.12%
+  Mínimo: 0.02%
+  Máximo: 190.91%
+
+Incertidumbre (muestra, valores filtrados):
+  Promedio: 5.567%
+  Mínimo: 3.584%
+  Máximo: 49.240%
+  Mediana: 3.684%
+  Valores válidos: 2,185 de 4,955 (44.1%)
+
+📁 Archivo completo: /home/atamos/atamostec/ATAMOSTEC/ATAMOSTEC/outputs/sr_minute_with_uncertainty.csv
+
+📄 RESUMEN DEL ARCHIVO DE ANÁLISIS
+--------------------------------------------------------------------------------
+Información clave del análisis:
+  Fecha: 2025-11-28 12:48:41
+  Minutos Validos: 480,459
+  U Global: 2): U_campaign_k2_rel
+  Sr Promedio: U_k2_rel = 4.807% ± 4.218% (SR promedio: 98.09%, n=14,657.0 minutos)
+
+📁 Archivo completo disponible en: /home/atamos/atamostec/ATAMOSTEC/ATAMOSTEC/outputs/sr_uncertainty_summary.txt
+
+================================================================================
+📈 ANÁLISIS DE TENDENCIAS TEMPORALES
+================================================================================
+
+Tendencia del SR
+--------------------------------------------------------------------------------
+SR promedio por mes (desde datos diarios):
+Mes          SR Promedio (%) Std (%)      Días    
+--------------------------------------------------
+2024-08      100.34%         0.59%        31      
+2024-09      99.34%          1.32%        30      
+2024-10      99.01%          0.37%        31      
+2024-11      98.59%          0.56%        30      
+2024-12      96.42%          0.27%        20      
+2025-01      96.66%          0.39%        26      
+2025-02      96.08%          0.43%        28      
+2025-03      58.55%          47.19%       31      
+2025-04      16.97%          36.10%       28      
+2025-05      96.55%          2.25%        19      
+2025-06      97.48%          0.97%        30      
+2025-07      97.82%          0.50%        31      
+2025-08      98.30%          0.57%        25      
+
+
+Tendencia de Incertidumbre
+--------------------------------------------------------------------------------
+Incertidumbre promedio por mes (desde datos diarios):
+Mes          U Promedio (%)  Std (%)      Días    
+--------------------------------------------------
+2024-08      4.798%          0.408%       31      
+2024-09      5.351%          0.378%       30      
+2024-10      6.263%          0.417%       31      
+2024-11      6.768%          0.156%       30      
+2024-12      7.061%          0.419%       20      
+2025-01      6.828%          0.749%       26      
+2025-02      6.212%          0.368%       28      
+2025-03      8.569%          3.650%       31      
+2025-04      10.237%         3.085%       28      
+2025-05      4.868%          0.460%       19      
+2025-06      4.963%          1.208%       30      
+2025-07      4.587%          0.322%       31      
+2025-08      4.866%          0.473%       25      
+
+
+Correlación SR vs Incertidumbre
+--------------------------------------------------------------------------------
+Correlación entre SR e Incertidumbre: -0.8414
+  → Correlación negativa: Mayor SR tiende a menor incertidumbre
+
+================================================================================
+✅ RESUMEN EJECUTIVO
+================================================================================
+✓ Total de días analizados: 360
+✓ Rango temporal: 2024-08-01 a 2025-08-25
+✓ Incertidumbre diaria promedio: 6.268%
+✓ SR promedio: 88.30%
+✓ Total de meses analizados: 13
+✓ Incertidumbre mensual promedio: 5.936%
+✓ Rango de incertidumbre mensual: 4.633% - 8.055%
+✓ Rangos de SR analizados: 6
+✓ Rango óptimo (menor incertidumbre): (95.0, 100.0]
+
+================================================================================
+📁 Archivos analizados:
+  - Diarios: /home/atamos/atamostec/ATAMOSTEC/ATAMOSTEC/outputs/sr_daily_abs_with_U.csv
+  - Mensual: /home/atamos/atamostec/ATAMOSTEC/ATAMOSTEC/outputs/sr_uncertainty_by_month.csv
+  - Rangos SR: /home/atamos/atamostec/ATAMOSTEC/ATAMOSTEC/outputs/sr_uncertainty_by_sr_range.csv
+  - Minutal: /home/atamos/atamostec/ATAMOSTEC/ATAMOSTEC/outputs/sr_minute_with_uncertainty.csv
+  - Resumen: /home/atamos/atamostec/ATAMOSTEC/ATAMOSTEC/outputs/sr_uncertainty_summary.txt
+================================================================================
+

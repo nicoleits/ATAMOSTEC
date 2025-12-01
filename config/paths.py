@@ -89,7 +89,22 @@ CALENDAR_OUTPUT_SUBDIR_GRAPH = os.path.join(BASE_OUTPUT_GRAPH_DIR, "calendario")
 # RUTAS DE SALIDA PARA ANÁLISIS DE INCERTIDUMBRE DE SR
 # ============================================================================
 
-# Archivos de salida de incertidumbre
+# Directorio base para propagación de errores
+PROPAGACION_ERRORES_DIR = os.path.join(PROJECT_ROOT, "propagacion de errores")
+PROPAGACION_ERRORES_REF_CELL_DIR = os.path.join(PROPAGACION_ERRORES_DIR, "ref_cell")
+PROPAGACION_ERRORES_SOLAR_NOON_DIR = os.path.join(PROPAGACION_ERRORES_REF_CELL_DIR, "mediodia_solar")
+
+# Asegurar que los directorios existen
+os.makedirs(PROPAGACION_ERRORES_REF_CELL_DIR, exist_ok=True)
+os.makedirs(PROPAGACION_ERRORES_SOLAR_NOON_DIR, exist_ok=True)
+
+# Archivos de salida de incertidumbre (propagación GUM) - Ref Cells
+SR_MINUTE_WITH_UNCERTAINTY_FILE = os.path.join(PROPAGACION_ERRORES_REF_CELL_DIR, "sr_minute_with_uncertainty.csv")
+SR_DAILY_ABS_WITH_U_FILE = os.path.join(PROPAGACION_ERRORES_REF_CELL_DIR, "sr_daily_abs_with_U.csv")
+SR_WEEKLY_ABS_WITH_U_FILE = os.path.join(PROPAGACION_ERRORES_REF_CELL_DIR, "sr_weekly_abs_with_U.csv")
+SR_MONTHLY_ABS_WITH_U_FILE = os.path.join(PROPAGACION_ERRORES_REF_CELL_DIR, "sr_monthly_abs_with_U.csv")
+SR_UNCERTAINTY_SUMMARY_FILE = os.path.join(PROPAGACION_ERRORES_REF_CELL_DIR, "sr_uncertainty_summary.txt")
+
+# Archivos legacy (compatibilidad)
 SR_DAILY_Q25_WITH_CI_FILE = os.path.join(BASE_OUTPUTS_DIR, "sr_daily_q25_with_ci.csv")
 SR_WEEKLY_Q25_WITH_CI_FILE = os.path.join(BASE_OUTPUTS_DIR, "sr_weekly_q25_with_ci.csv")
-SR_UNCERTAINTY_SUMMARY_FILE = os.path.join(BASE_OUTPUTS_DIR, "sr_uncertainty_summary.txt")

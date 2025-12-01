@@ -1,7 +1,16 @@
 import sys
 from typing import List, Callable, Dict, Any
 import os
+import logging
 from datetime import datetime
+
+# Configurar logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
 # Agregar el directorio raíz del proyecto al path
 project_root = os.path.dirname(os.path.abspath(__file__))
@@ -28,7 +37,7 @@ from analysis.calendar_analyzer import run_analysis as run_calendar
 from analysis.analisis_iv600_fixed import run_analysis as run_iv600_filtrado
 from analysis.consolidated_weekly_q25_plot import create_consolidated_weekly_q25_plot, create_synchronized_weekly_q25_plot, create_consolidated_weekly_q25_plot_oct_mar
 from analysis.statistical_deviation_analyzer import run_analysis as run_statistical_deviation
-from analysis.sr_uncertainty import run_analysis as run_sr_uncertainty
+# from analysis.sr_uncertainty import run_analysis as run_sr_uncertainty  # Módulo eliminado
 
 def run_pv_glasses_q25():
     """Wrapper para el análisis PV Glasses Q25 compatible con el menú principal."""
@@ -53,8 +62,8 @@ ANALYSIS_OPTIONS = {
     9: ("Gráfico Consolidado Semanal Q25 (sin tendencia)", create_consolidated_weekly_q25_plot),
     13: ("Gráfico Consolidado Sincronizado Q25", create_synchronized_weekly_q25_plot),
     15: ("Gráfico Consolidado Octubre 2024 - Marzo 2025", create_consolidated_weekly_q25_plot_oct_mar),
-    12: ("Análisis de Desviaciones Estadísticas", run_statistical_deviation),
-    16: ("Análisis de Incertidumbre de SR", run_sr_uncertainty)
+    12: ("Análisis de Desviaciones Estadísticas", run_statistical_deviation)
+    # 16: ("Análisis de Incertidumbre de SR", run_sr_uncertainty)  # Módulo eliminado
 }
 
 # Análisis que requieren preprocesamiento específico

@@ -24,6 +24,8 @@ FUNCIONALIDADES PRINCIPALES:
 5. PVStand: Descarga de datos de módulos PVStand (perc1fixed y perc2fixed) con parámetros
    de potencia, corriente y voltaje máximos
 
+6. Solys2: Descarga de datos de radiación solar (GHI, DHI, DNI) desde PSDA.meteo6857
+
 CARACTERÍSTICAS:
 ----------------
 - Interfaz interactiva con menú de opciones
@@ -45,7 +47,7 @@ El script guiará al usuario a través de:
 3. Configuración adicional según el tipo seleccionado (fotoceldas, horarios, etc.)
 
 Los datos descargados se guardan en CSV en el directorio configurado:
-    /home/atamos/atamostec/ATAMOSTEC/ATAMOSTEC/datos/
+/home/atamos/atamostec/ATAMOSTEC/ATAMOSTEC/datos/
 
 NOTAS:
 ------
@@ -1551,6 +1553,331 @@ def download_pvstand_clickhouse(start_date, end_date, output_dir):
             logger.info("✅ Conexión a ClickHouse cerrada")
 
 
+def download_solys2_clickhouse(start_date, end_date, output_dir):
+    """
+    Descarga y procesa datos de radiación solar (Solys2) desde ClickHouse.
+    
+    Esta función:
+    - Esquema: "PSDA"
+    - Tabla: "meteo6857"
+    - Columnas: timestamp, GHIAvg, DHIAvg, DNIAvg
+    - Renombra columnas: GHIAvg -> GHI, DHIAvg -> DHI, DNIAvg -> DNI
+    - Renombra timestamp -> fecha hora
+    
+    Args:
+        start_date (datetime): Fecha de inicio del rango (con timezone)
+        end_date (datetime): Fecha de fin del rango (con timezone)
+        output_dir (str): Directorio donde guardar los archivos
+        
+    Returns:
+        bool: True si la descarga fue exitosa, False en caso contrario
+    """
+    logger.info("☀️  Iniciando descarga de datos Solys2 desde ClickHouse...")
+    client = None
+    
+    try:
+        # Conectar a ClickHouse
+        logger.info("Conectando a ClickHouse...")
+        client = clickhouse_connect.get_client(
+            host=CLICKHOUSE_CONFIG['host'],
+            port=int(CLICKHOUSE_CONFIG['port']),
+            username=CLICKHOUSE_CONFIG['user'],
+            password=CLICKHOUSE_CONFIG['password']
+        )
+        logger.info("✅ Conexión a ClickHouse establecida")
+        
+        # Convertir fechas al formato correcto para ClickHouse (asegurar timezone UTC)
+        if isinstance(start_date, pd.Timestamp):
+            start_date_utc = pd.Timestamp(start_date)
+        else:
+            start_date_utc = pd.to_datetime(start_date)
+            
+        if isinstance(end_date, pd.Timestamp):
+            end_date_utc = pd.Timestamp(end_date)
+        else:
+            end_date_utc = pd.to_datetime(end_date)
+        
+        # Asegurar timezone UTC
+        if start_date_utc.tz is None:
+            start_date_utc = start_date_utc.tz_localize('UTC')
+        else:
+            start_date_utc = start_date_utc.tz_convert('UTC')
+            
+        if end_date_utc.tz is None:
+            end_date_utc = end_date_utc.tz_localize('UTC')
+        else:
+            end_date_utc = end_date_utc.tz_convert('UTC')
+        
+        start_str = start_date_utc.strftime("%Y-%m-%d %H:%M:%S")
+        end_str = end_date_utc.strftime("%Y-%m-%d %H:%M:%S")
+        
+        logger.info(f"📅 Consultando datos desde {start_str} hasta {end_str}")
+        
+        # Consultar datos de solys2 desde el esquema PSDA
+        # La tabla ya tiene las columnas en formato ancho
+        logger.info("Consultando datos Solys2 desde ClickHouse...")
+        query = f"""
+        SELECT 
+            timestamp,
+            GHIAvg,
+            DHIAvg,
+            DNIAvg
+        FROM PSDA.meteo6857 
+        WHERE timestamp >= '{start_str}' AND timestamp <= '{end_str}'
+        ORDER BY timestamp
+        """
+        
+        logger.info("Ejecutando consulta ClickHouse...")
+        logger.info(f"Consulta: {query[:200]}...")
+        
+        result = client.query(query)
+        
+        if not result.result_set:
+            logger.warning("⚠️  No se encontraron datos de Solys2 en ClickHouse")
+            return False
+            
+        logger.info(f"📊 Datos obtenidos: {len(result.result_set)} registros")
+        
+        # Convertir a DataFrame
+        logger.info("Procesando datos...")
+        df_solys2 = pd.DataFrame(result.result_set, columns=['timestamp', 'GHIAvg', 'DHIAvg', 'DNIAvg'])
+        
+        # Convertir timestamp a datetime y asegurar que esté en UTC
+        df_solys2['timestamp'] = pd.to_datetime(df_solys2['timestamp'])
+        if df_solys2['timestamp'].dt.tz is None:
+            df_solys2['timestamp'] = df_solys2['timestamp'].dt.tz_localize('UTC')
+        else:
+            df_solys2['timestamp'] = df_solys2['timestamp'].dt.tz_convert('UTC')
+
+        # Establecer timestamp como índice
+        df_solys2.set_index('timestamp', inplace=True)
+        
+        # Renombrar el índice a 'fecha hora'
+        df_solys2.index.name = 'fecha hora'
+        
+        # Renombrar las columnas: GHIAvg -> GHI, DHIAvg -> DHI, DNIAvg -> DNI
+        column_rename_map = {
+            'GHIAvg': 'GHI',
+            'DHIAvg': 'DHI',
+            'DNIAvg': 'DNI'
+        }
+        
+        df_solys2.rename(columns=column_rename_map, inplace=True)
+        
+        # Reordenar columnas en el orden especificado: fecha hora, GHI, DHI, DNI
+        ordered_columns = ['GHI', 'DHI', 'DNI']
+        available_columns = [col for col in ordered_columns if col in df_solys2.columns]
+        
+        # Si hay columnas adicionales, agregarlas al final
+        other_columns = [col for col in df_solys2.columns if col not in ordered_columns]
+        final_column_order = available_columns + other_columns
+        
+        df_solys2 = df_solys2[final_column_order]
+        
+        # Mostrar información sobre el rango de fechas en los datos
+        logger.info(f"📅 Rango de fechas en los datos:")
+        logger.info(f"   Fecha más antigua: {df_solys2.index.min()}")
+        logger.info(f"   Fecha más reciente: {df_solys2.index.max()}")
+
+        # Verificar que hay datos en el rango especificado
+        if len(df_solys2) == 0:
+            logger.warning("⚠️  No se encontraron datos en el rango de fechas especificado.")
+            return False
+
+        # Crear carpeta específica para Solys2
+        section_dir = os.path.join(output_dir, 'solys2')
+        os.makedirs(section_dir, exist_ok=True)
+        logger.info(f"📁 Carpeta de sección: {section_dir}")
+        
+        # Guardar datos
+        output_filepath = os.path.join(section_dir, 'raw_solys2_data.csv')
+        logger.info(f"💾 Guardando datos en: {output_filepath}")
+        df_solys2.to_csv(output_filepath)
+
+        logger.info(f"✅ Datos Solys2 desde ClickHouse guardados exitosamente")
+        logger.info(f"📊 Total de registros: {len(df_solys2)}")
+        logger.info(f"📅 Rango de fechas: {df_solys2.index.min()} a {df_solys2.index.max()}")
+        logger.info(f"📊 Columnas: {', '.join(df_solys2.columns.tolist())}")
+
+        # Mostrar estadísticas básicas
+        logger.info("📊 Estadísticas de los datos:")
+        for col in ['GHI', 'DHI', 'DNI']:
+            if col in df_solys2.columns:
+                logger.info(f"   {col} - Rango: {df_solys2[col].min():.3f} a {df_solys2[col].max():.3f}")
+                logger.info(f"   {col} - Promedio: {df_solys2[col].mean():.3f}")
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Error en la descarga de datos Solys2: {e}")
+        import traceback
+        logger.error(f"Detalles del error:\n{traceback.format_exc()}")
+        return False
+    finally:
+        if client:
+            logger.info("Cerrando conexión a ClickHouse...")
+            client.close()
+            logger.info("✅ Conexión a ClickHouse cerrada")
+
+
+def download_refcells_clickhouse(start_date, end_date, output_dir):
+    """
+    Descarga y procesa datos de celdas de referencia desde ClickHouse.
+    
+    Esta función descarga desde ClickHouse:
+    - Esquema: PSDA
+    - Tabla: fixed_plant_atamo_1
+    - Columnas: timestamp, 1RC411(w.m-2), 1RC412(w.m-2)
+    
+    Args:
+        start_date (datetime): Fecha de inicio del rango (con timezone)
+        end_date (datetime): Fecha de fin del rango (con timezone)
+        output_dir (str): Directorio donde guardar los archivos
+        
+    Returns:
+        bool: True si la descarga fue exitosa, False en caso contrario
+    """
+    logger.info("🔋 Iniciando descarga de datos de celdas de referencia desde ClickHouse...")
+    client = None
+    
+    try:
+        # Conectar a ClickHouse
+        logger.info("Conectando a ClickHouse...")
+        client = clickhouse_connect.get_client(
+            host=CLICKHOUSE_CONFIG['host'],
+            port=int(CLICKHOUSE_CONFIG['port']),
+            username=CLICKHOUSE_CONFIG['user'],
+            password=CLICKHOUSE_CONFIG['password']
+        )
+        logger.info("✅ Conexión a ClickHouse establecida")
+        
+        # Convertir fechas al formato para ClickHouse
+        if isinstance(start_date, pd.Timestamp):
+            start_date_utc = pd.Timestamp(start_date)
+        else:
+            start_date_utc = pd.to_datetime(start_date)
+            
+        if isinstance(end_date, pd.Timestamp):
+            end_date_utc = pd.Timestamp(end_date)
+        else:
+            end_date_utc = pd.to_datetime(end_date)
+        
+        # Asegurar timezone UTC
+        if start_date_utc.tz is None:
+            start_date_utc = start_date_utc.tz_localize('UTC')
+        else:
+            start_date_utc = start_date_utc.tz_convert('UTC')
+            
+        if end_date_utc.tz is None:
+            end_date_utc = end_date_utc.tz_localize('UTC')
+        else:
+            end_date_utc = end_date_utc.tz_convert('UTC')
+        
+        start_str = start_date_utc.strftime("%Y-%m-%d %H:%M:%S")
+        end_str = end_date_utc.strftime("%Y-%m-%d %H:%M:%S")
+        
+        logger.info(f"📅 Consultando datos desde {start_str} hasta {end_str}")
+        
+        # Configuración de la consulta
+        schema = "PSDA"
+        table = "fixed_plant_atamo_1"
+        columns_to_query = ["timestamp", "1RC411(w.m-2)", "1RC412(w.m-2)"]
+        
+        logger.info(f"📊 Configuración:")
+        logger.info(f"   Esquema: {schema}")
+        logger.info(f"   Tabla: {table}")
+        logger.info(f"   Columnas: {', '.join(columns_to_query)}")
+        
+        # Consultar datos
+        query = f"""
+        SELECT 
+            timestamp,
+            `1RC411(w.m-2)`,
+            `1RC412(w.m-2)`
+        FROM {schema}.{table}
+        WHERE timestamp >= '{start_str}' AND timestamp <= '{end_str}'
+        ORDER BY timestamp
+        """
+        
+        logger.info("Ejecutando consulta ClickHouse...")
+        logger.info(f"Consulta: {query[:200]}...")
+        
+        result = client.query(query)
+        
+        if not result.result_set:
+            logger.warning("⚠️  No se encontraron datos de ref cells en ClickHouse")
+            return False
+        
+        logger.info(f"📊 Datos obtenidos: {len(result.result_set)} registros")
+        
+        # Convertir a DataFrame
+        logger.info("Procesando datos...")
+        df_refcells = pd.DataFrame(result.result_set, columns=columns_to_query)
+        
+        # Convertir timestamp a datetime
+        df_refcells['timestamp'] = pd.to_datetime(df_refcells['timestamp'])
+        if df_refcells['timestamp'].dt.tz is None:
+            df_refcells['timestamp'] = df_refcells['timestamp'].dt.tz_localize('UTC')
+        else:
+            df_refcells['timestamp'] = df_refcells['timestamp'].dt.tz_convert('UTC')
+        
+        # Establecer timestamp como índice para resample
+        df_refcells.set_index('timestamp', inplace=True)
+        df_refcells = df_refcells.sort_index()
+        
+        # Aplicar resample a 1 minuto (promedio) si es necesario
+        # Verificar si ya está en resolución de 1 minuto
+        if len(df_refcells) > 1:
+            time_diff = df_refcells.index.to_series().diff().median()
+            if time_diff > pd.Timedelta(minutes=1.5):
+                logger.info("Aplicando resample a 1 minuto...")
+                df_refcells = df_refcells.resample('1min').mean().dropna(how='all')
+                logger.info(f"📊 Registros después del resample: {len(df_refcells)}")
+        
+        # Resetear índice para guardar
+        df_refcells = df_refcells.reset_index()
+        
+        # Mostrar información sobre el rango de fechas en los datos
+        logger.info(f"📅 Rango de fechas en los datos:")
+        logger.info(f"   Fecha más antigua: {df_refcells['timestamp'].min()}")
+        logger.info(f"   Fecha más reciente: {df_refcells['timestamp'].max()}")
+        
+        # Verificar que hay datos en el rango especificado
+        if len(df_refcells) == 0:
+            logger.warning("⚠️  No se encontraron datos en el rango de fechas especificado.")
+            return False
+        
+        # Guardar datos
+        output_filepath = os.path.join(output_dir, 'refcells_data.csv')
+        logger.info(f"💾 Guardando datos en: {output_filepath}")
+        df_refcells.to_csv(output_filepath, index=False)
+        
+        logger.info(f"✅ Datos de celdas de referencia desde ClickHouse guardados exitosamente")
+        logger.info(f"📊 Total de registros: {len(df_refcells)}")
+        logger.info(f"📊 Columnas: {', '.join(df_refcells.columns.tolist())}")
+        logger.info(f"📅 Rango de fechas: {df_refcells['timestamp'].min()} a {df_refcells['timestamp'].max()}")
+        
+        # Mostrar estadísticas básicas
+        logger.info("📊 Estadísticas de los datos:")
+        for col in ['1RC411(w.m-2)', '1RC412(w.m-2)']:
+            if col in df_refcells.columns:
+                logger.info(f"   {col} - Rango: {df_refcells[col].min():.3f} a {df_refcells[col].max():.3f} W/m²")
+                logger.info(f"   {col} - Promedio: {df_refcells[col].mean():.3f} W/m²")
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Error en la descarga de datos de celdas de referencia desde ClickHouse: {e}")
+        import traceback
+        logger.error(f"Detalles del error:\n{traceback.format_exc()}")
+        return False
+    finally:
+        if client:
+            logger.info("Cerrando conexión a ClickHouse...")
+            client.close()
+            logger.info("✅ Conexión a ClickHouse cerrada")
+
+
 # ============================================================================
 # MENÚ INTERACTIVO PARA SELECCIONAR QUÉ DESCARGAR
 # ============================================================================
@@ -1568,6 +1895,8 @@ def mostrar_menu():
     print("  5. DustIQ")
     print("  6. Soiling Kit")
     print("  7. PVStand")
+    print("  8. Solys2 (Radiación solar)")
+    print("  9. RefCells (Celdas de referencia)")
     print("  0. Salir")
     print("-"*60)
 
@@ -1636,6 +1965,16 @@ def ejecutar_descargas(start_date, end_date, opcion, fotoceldas_seleccionadas=No
         print("\n🔋 Iniciando descarga de PVStand desde ClickHouse...")
         resultados['pvstand'] = download_pvstand_clickhouse(start_date, end_date, OUTPUT_DIR)
         
+    elif opcion == '8':
+        # Solys2 desde ClickHouse
+        print("\n☀️  Iniciando descarga de Solys2 desde ClickHouse...")
+        resultados['solys2'] = download_solys2_clickhouse(start_date, end_date, OUTPUT_DIR)
+        
+    elif opcion == '9':
+        # RefCells desde ClickHouse
+        print("\n🔋 Iniciando descarga de RefCells desde ClickHouse...")
+        resultados['refcells'] = download_refcells_clickhouse(start_date, end_date, OUTPUT_DIR)
+        
     elif opcion == '0':
         print("\n👋 Saliendo...")
         return
@@ -1672,6 +2011,14 @@ def ejecutar_descargas(start_date, end_date, opcion, fotoceldas_seleccionadas=No
         estado = "✅ Exitoso" if resultados['pvstand'] else "❌ Fallido"
         print(f"  PVStand: {estado}")
     
+    if 'solys2' in resultados:
+        estado = "✅ Exitoso" if resultados['solys2'] else "❌ Fallido"
+        print(f"  Solys2: {estado}")
+    
+    if 'refcells' in resultados:
+        estado = "✅ Exitoso" if resultados['refcells'] else "❌ Fallido"
+        print(f"  RefCells: {estado}")
+    
     print("="*60 + "\n")
 
 
@@ -1696,7 +2043,7 @@ if __name__ == "__main__":
             print("\n👋 ¡Hasta luego!")
             break
         
-        if opcion in ['1', '2', '3', '4', '5', '6', '7']:
+        if opcion in ['1', '2', '3', '4', '5', '6', '7', '8', '9']:
             # Si la opción incluye PV Glasses, permitir seleccionar fotoceldas
             fotoceldas_seleccionadas = None
             if opcion in ['3', '4']:
@@ -1710,5 +2057,5 @@ if __name__ == "__main__":
                 print("\n👋 ¡Hasta luego!")
                 break
         else:
-            print("\n❌ Opción inválida. Por favor selecciona 0, 1, 2, 3, 4, 5, 6 o 7.")
+            print("\n❌ Opción inválida. Por favor selecciona 0, 1, 2, 3, 4, 5, 6, 7, 8 o 9.")
 

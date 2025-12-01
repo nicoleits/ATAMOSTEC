@@ -140,6 +140,27 @@ def analyze_ref_cells_data(raw_data_filepath: str) -> bool:
             print(f"\nLos gráficos de celdas de referencia se guardaron en: {paths.REFCELLS_OUTPUT_SUBDIR_GRAPH}\n")
             return True
 
+        # --- 4.5. Análisis de Propagación de Incertidumbre de SR ---
+        logger.info("Iniciando análisis de propagación de incertidumbre de SR...")
+        try:
+            from analysis.sr_uncertainty_propagation import run_uncertainty_propagation_analysis
+            # Pasar el DataFrame original con las columnas S y C
+            # La función de incertidumbre se encargará de sus propios filtros de calidad.
+            uncertainty_success = run_uncertainty_propagation_analysis(
+                df_ref_cells,
+                soiled_col=settings.SOILED_COL,
+                clean_col=settings.CLEAN_COL
+            )
+            if uncertainty_success:
+                logger.info("✅ Análisis de propagación de incertidumbre completado exitosamente.")
+            else:
+                logger.warning("⚠️  El análisis de propagación de incertidumbre no se completó exitosamente.")
+        except ImportError as e:
+            logger.error(f"No se pudo importar el módulo 'sr_uncertainty_propagation': {e}")
+        except Exception as e:
+            logger.error(f"Error al ejecutar el análisis de propagación de incertidumbre: {e}", exc_info=True)
+        # Continuar con el resto del análisis aunque falle la incertidumbre
+
         # --- 5. Filtrado de SR ---
         sr_min_val = settings.REFCELLS_SR_MIN_FILTER * 100
         sr_max_val = settings.REFCELLS_SR_MAX_FILTER * 100
@@ -177,26 +198,27 @@ def analyze_ref_cells_data(raw_data_filepath: str) -> bool:
             df_weekly_sr_q25.to_csv(os.path.join(paths.REFCELLS_OUTPUT_SUBDIR_CSV, 'ref_cells_sr_semanal_q25.csv'))
 
         # --- 8. Análisis de Incertidumbre de SR ---
-        logger.info("Iniciando análisis de incertidumbre de SR...")
-        try:
-            from analysis.sr_uncertainty import calculate_sr_uncertainty, save_uncertainty_results
-            
-            # Calcular incertidumbre usando los datos originales filtrados
-            uncertainty_results = calculate_sr_uncertainty(df_ref_cells)
-            
-            if uncertainty_results:
-                # Guardar resultados de incertidumbre
-                save_success = save_uncertainty_results(uncertainty_results)
-                if save_success:
-                    logger.info("Análisis de incertidumbre completado exitosamente")
-                else:
-                    logger.warning("Error guardando resultados de incertidumbre")
-            else:
-                logger.warning("No se obtuvieron resultados de incertidumbre")
-                
-        except Exception as e:
-            logger.error(f"Error en análisis de incertidumbre: {e}")
-            # Continuar con el resto del análisis aunque falle la incertidumbre
+        # Módulo sr_uncertainty eliminado - comentado temporalmente
+        # logger.info("Iniciando análisis de incertidumbre de SR...")
+        # try:
+        #     from analysis.sr_uncertainty import calculate_sr_uncertainty, save_uncertainty_results
+        #     
+        #     # Calcular incertidumbre usando los datos originales filtrados
+        #     uncertainty_results = calculate_sr_uncertainty(df_ref_cells)
+        #     
+        #     if uncertainty_results:
+        #         # Guardar resultados de incertidumbre
+        #         save_success = save_uncertainty_results(uncertainty_results)
+        #         if save_success:
+        #             logger.info("Análisis de incertidumbre completado exitosamente")
+        #         else:
+        #             logger.warning("Error guardando resultados de incertidumbre")
+        #     else:
+        #         logger.warning("No se obtuvieron resultados de incertidumbre")
+        #         
+        # except Exception as e:
+        #     logger.error(f"Error en análisis de incertidumbre: {e}")
+        #     # Continuar con el resto del análisis aunque falle la incertidumbre
 
         # --- 8. Generación de Gráficos ---
         logger.info("Generando gráficos para Celdas de Referencia...")
@@ -871,7 +893,13 @@ def _analyze_cloudy_days_solar_noon(df_ref_cells: pd.DataFrame, ref_col: str, va
             
             # 1. Gráfico de clasificación temporal
             fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(15, 12))
-            plt.rcParams["font.family"] = "Times New Roman"
+            # Usar fuente por defecto de matplotlib (evita warning de Times New Roman no encontrada)
+            # plt.rcParams["font.family"] = "Times New Roman"  # Comentado: fuente no disponible en el sistema
+            # Usar fuente serif genérica o dejar la por defecto
+            try:
+                plt.rcParams["font.family"] = "serif"
+            except:
+                pass  # Usar fuente por defecto si serif no está disponible
             # Irradiancia promedio diaria
             dates = pd.to_datetime(daily_stats.index)
             colors_map = {'Despejado': '#2ca02c', 'Parcialmente_Nublado': '#ff7f0e', 'Nublado': '#d62728'}
