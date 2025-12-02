@@ -47,7 +47,7 @@ El script guiará al usuario a través de:
 3. Configuración adicional según el tipo seleccionado (fotoceldas, horarios, etc.)
 
 Los datos descargados se guardan en CSV en el directorio configurado:
-/home/atamos/atamostec/ATAMOSTEC/ATAMOSTEC/datos/
+datos/ (relativo al directorio raíz del proyecto)
 
 NOTAS:
 ------
@@ -100,8 +100,12 @@ CLICKHOUSE_CONFIG = {
 DEFAULT_START_DATE = pd.to_datetime('01/07/2024', dayfirst=True).tz_localize('UTC')
 DEFAULT_END_DATE = pd.to_datetime('31/12/2025', dayfirst=True).tz_localize('UTC')
 
-# Directorio de salida - ruta absoluta actualizada para el usuario actual
-OUTPUT_DIR = "/home/atamos/atamostec/ATAMOSTEC/ATAMOSTEC/datos"
+# Directorio de salida - ruta relativa al directorio del proyecto
+# Obtener el directorio del script y construir la ruta relativa
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+# Subir un nivel desde download/ para llegar a ATAMOSTEC/ (PROJECT_ROOT)
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+OUTPUT_DIR = os.path.join(PROJECT_ROOT, "datos")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
@@ -1553,6 +1557,172 @@ def download_pvstand_clickhouse(start_date, end_date, output_dir):
             logger.info("✅ Conexión a ClickHouse cerrada")
 
 
+def download_pvstand_temperature_clickhouse(start_date, end_date, output_dir):
+    """
+    Descarga y procesa datos de temperatura de módulos PVStand desde ClickHouse.
+    
+    Esta función:
+    - Esquema: "PSDA"
+    - Tabla: "fixed_plant_atamo_1" (misma tabla que RefCells)
+    - Columnas: "timestamp", "1TE416(C)", "1TE418(C)"
+    - Filtra por horario (13:00-18:00) como en el análisis de PVStand
+    
+    Args:
+        start_date (datetime): Fecha de inicio del rango (con timezone)
+        end_date (datetime): Fecha de fin del rango (con timezone)
+        output_dir (str): Directorio donde guardar los archivos
+        
+    Returns:
+        bool: True si la descarga fue exitosa, False en caso contrario
+    """
+    logger.info("🌡️  Iniciando descarga de datos de temperatura PVStand desde ClickHouse...")
+    client = None
+    
+    try:
+        # Conectar a ClickHouse
+        logger.info("Conectando a ClickHouse...")
+        client = clickhouse_connect.get_client(
+            host=CLICKHOUSE_CONFIG['host'],
+            port=int(CLICKHOUSE_CONFIG['port']),
+            username=CLICKHOUSE_CONFIG['user'],
+            password=CLICKHOUSE_CONFIG['password']
+        )
+        logger.info("✅ Conexión a ClickHouse establecida")
+        
+        # Convertir fechas al formato correcto para ClickHouse (asegurar timezone UTC)
+        if isinstance(start_date, pd.Timestamp):
+            start_date_utc = pd.Timestamp(start_date)
+        else:
+            start_date_utc = pd.to_datetime(start_date)
+            
+        if isinstance(end_date, pd.Timestamp):
+            end_date_utc = pd.Timestamp(end_date)
+        else:
+            end_date_utc = pd.to_datetime(end_date)
+        
+        # Asegurar timezone UTC
+        if start_date_utc.tz is None:
+            start_date_utc = start_date_utc.tz_localize('UTC')
+        else:
+            start_date_utc = start_date_utc.tz_convert('UTC')
+            
+        if end_date_utc.tz is None:
+            end_date_utc = end_date_utc.tz_localize('UTC')
+        else:
+            end_date_utc = end_date_utc.tz_convert('UTC')
+        
+        start_str = start_date_utc.strftime("%Y-%m-%d %H:%M:%S")
+        end_str = end_date_utc.strftime("%Y-%m-%d %H:%M:%S")
+        
+        logger.info(f"📅 Consultando datos desde {start_str} hasta {end_str}")
+        
+        # Consultar datos de temperatura desde ClickHouse
+        # Los datos están en la misma tabla que RefCells: PSDA.fixed_plant_atamo_1
+        logger.info("Consultando datos de temperatura PVStand desde ClickHouse...")
+        query = f"""
+        SELECT 
+            timestamp,
+            `1TE416(C)`,
+            `1TE418(C)`
+        FROM PSDA.fixed_plant_atamo_1 
+        WHERE timestamp >= '{start_str}' AND timestamp <= '{end_str}'
+        ORDER BY timestamp
+        """
+        
+        logger.info("Ejecutando consulta ClickHouse...")
+        logger.info(f"Consulta: {query[:200]}...")
+        
+        result = client.query(query)
+        
+        if not result.result_set:
+            logger.warning("⚠️  No se encontraron datos de temperatura PVStand en ClickHouse")
+            logger.info("💡 Verificando tabla: PSDA.fixed_plant_atamo_1")
+            return False
+            
+        logger.info(f"📊 Datos obtenidos: {len(result.result_set)} registros")
+        
+        # Convertir a DataFrame
+        logger.info("Procesando datos...")
+        df_temp = pd.DataFrame(result.result_set, columns=['timestamp', '1TE416(C)', '1TE418(C)'])
+        
+        # Convertir timestamp a datetime y asegurar que esté en UTC
+        df_temp['timestamp'] = pd.to_datetime(df_temp['timestamp'])
+        if df_temp['timestamp'].dt.tz is None:
+            df_temp['timestamp'] = df_temp['timestamp'].dt.tz_localize('UTC')
+        else:
+            df_temp['timestamp'] = df_temp['timestamp'].dt.tz_convert('UTC')
+        
+        # Establecer timestamp como índice
+        df_temp.set_index('timestamp', inplace=True)
+        
+        # Ordenar por timestamp
+        logger.info("Ordenando datos por timestamp...")
+        df_temp = df_temp.sort_index()
+        
+        # Filtrar por horario (13:00-18:00) como en el análisis de PVStand
+        logger.info("Aplicando filtro horario (13:00-18:00)...")
+        df_temp_filtered = df_temp.between_time('13:00', '18:00')
+        logger.info(f"📊 Registros después del filtro horario: {len(df_temp_filtered)}")
+        
+        # Renombrar índice a TIMESTAMP para compatibilidad con el código existente
+        df_temp_filtered.index.name = 'TIMESTAMP'
+        
+        # Resetear índice para guardar con TIMESTAMP como columna
+        df_temp_filtered = df_temp_filtered.reset_index()
+        
+        # Mostrar información sobre el rango de fechas en los datos
+        logger.info(f"📅 Rango de fechas en los datos:")
+        logger.info(f"   Fecha más antigua: {df_temp_filtered['TIMESTAMP'].min()}")
+        logger.info(f"   Fecha más reciente: {df_temp_filtered['TIMESTAMP'].max()}")
+        
+        # Verificar que hay datos en el rango especificado
+        if len(df_temp_filtered) == 0:
+            logger.warning("⚠️  No se encontraron datos en el rango de fechas y horario especificado.")
+            return False
+        
+        # Crear carpeta específica para PVStand temperatura
+        section_dir = os.path.join(output_dir, 'pvstand')
+        os.makedirs(section_dir, exist_ok=True)
+        logger.info(f"📁 Carpeta de sección: {section_dir}")
+        
+        # Guardar datos
+        output_filepath = os.path.join(section_dir, 'data_temp.csv')
+        logger.info(f"💾 Guardando datos en: {output_filepath}")
+        df_temp_filtered.to_csv(output_filepath, index=False)
+        
+        logger.info(f"✅ Datos de temperatura PVStand desde ClickHouse guardados exitosamente")
+        logger.info(f"📊 Total de registros: {len(df_temp_filtered)}")
+        logger.info(f"📅 Rango de fechas: {df_temp_filtered['TIMESTAMP'].min()} a {df_temp_filtered['TIMESTAMP'].max()}")
+        
+        # Mostrar estadísticas básicas
+        logger.info("📊 Estadísticas de los datos:")
+        if '1TE416(C)' in df_temp_filtered.columns:
+            logger.info(f"   1TE416(C) - Rango: {df_temp_filtered['1TE416(C)'].min():.2f} a {df_temp_filtered['1TE416(C)'].max():.2f} °C")
+            logger.info(f"   1TE416(C) - Promedio: {df_temp_filtered['1TE416(C)'].mean():.2f} °C")
+        if '1TE418(C)' in df_temp_filtered.columns:
+            logger.info(f"   1TE418(C) - Rango: {df_temp_filtered['1TE418(C)'].min():.2f} a {df_temp_filtered['1TE418(C)'].max():.2f} °C")
+            logger.info(f"   1TE418(C) - Promedio: {df_temp_filtered['1TE418(C)'].mean():.2f} °C")
+        
+        # Mostrar información sobre la estructura de datos
+        logger.info("\n📋 Estructura de datos de temperatura PVStand:")
+        logger.info(f"   - TIMESTAMP: Fecha y hora de la medición")
+        logger.info(f"   - 1TE416(C): Temperatura del módulo sucio (perc1fixed)")
+        logger.info(f"   - 1TE418(C): Temperatura del módulo de referencia (perc2fixed)")
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Error en la descarga de datos de temperatura PVStand desde ClickHouse: {e}")
+        import traceback
+        logger.error(f"Detalles del error:\n{traceback.format_exc()}")
+        return False
+    finally:
+        if client:
+            logger.info("Cerrando conexión a ClickHouse...")
+            client.close()
+            logger.info("✅ Conexión a ClickHouse cerrada")
+
+
 def download_solys2_clickhouse(start_date, end_date, output_dir):
     """
     Descarga y procesa datos de radiación solar (Solys2) desde ClickHouse.
@@ -1847,8 +2017,13 @@ def download_refcells_clickhouse(start_date, end_date, output_dir):
             logger.warning("⚠️  No se encontraron datos en el rango de fechas especificado.")
             return False
         
+        # Crear carpeta específica para RefCells
+        section_dir = os.path.join(output_dir, 'refcells')
+        os.makedirs(section_dir, exist_ok=True)
+        logger.info(f"📁 Carpeta de sección: {section_dir}")
+        
         # Guardar datos
-        output_filepath = os.path.join(output_dir, 'refcells_data.csv')
+        output_filepath = os.path.join(section_dir, 'refcells_data.csv')
         logger.info(f"💾 Guardando datos en: {output_filepath}")
         df_refcells.to_csv(output_filepath, index=False)
         
@@ -1895,8 +2070,9 @@ def mostrar_menu():
     print("  5. DustIQ")
     print("  6. Soiling Kit")
     print("  7. PVStand")
-    print("  8. Solys2 (Radiación solar)")
-    print("  9. RefCells (Celdas de referencia)")
+    print("  8. PVStand Temperatura")
+    print("  9. Solys2 (Radiación solar)")
+    print(" 10. RefCells (Celdas de referencia)")
     print("  0. Salir")
     print("-"*60)
 
@@ -1966,11 +2142,16 @@ def ejecutar_descargas(start_date, end_date, opcion, fotoceldas_seleccionadas=No
         resultados['pvstand'] = download_pvstand_clickhouse(start_date, end_date, OUTPUT_DIR)
         
     elif opcion == '8':
+        # PVStand Temperatura desde ClickHouse
+        print("\n🌡️  Iniciando descarga de temperatura PVStand desde ClickHouse...")
+        resultados['pvstand_temp'] = download_pvstand_temperature_clickhouse(start_date, end_date, OUTPUT_DIR)
+        
+    elif opcion == '9':
         # Solys2 desde ClickHouse
         print("\n☀️  Iniciando descarga de Solys2 desde ClickHouse...")
         resultados['solys2'] = download_solys2_clickhouse(start_date, end_date, OUTPUT_DIR)
         
-    elif opcion == '9':
+    elif opcion == '10':
         # RefCells desde ClickHouse
         print("\n🔋 Iniciando descarga de RefCells desde ClickHouse...")
         resultados['refcells'] = download_refcells_clickhouse(start_date, end_date, OUTPUT_DIR)
@@ -2011,6 +2192,10 @@ def ejecutar_descargas(start_date, end_date, opcion, fotoceldas_seleccionadas=No
         estado = "✅ Exitoso" if resultados['pvstand'] else "❌ Fallido"
         print(f"  PVStand: {estado}")
     
+    if 'pvstand_temp' in resultados:
+        estado = "✅ Exitoso" if resultados['pvstand_temp'] else "❌ Fallido"
+        print(f"  PVStand Temperatura: {estado}")
+    
     if 'solys2' in resultados:
         estado = "✅ Exitoso" if resultados['solys2'] else "❌ Fallido"
         print(f"  Solys2: {estado}")
@@ -2043,7 +2228,7 @@ if __name__ == "__main__":
             print("\n👋 ¡Hasta luego!")
             break
         
-        if opcion in ['1', '2', '3', '4', '5', '6', '7', '8', '9']:
+        if opcion in ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']:
             # Si la opción incluye PV Glasses, permitir seleccionar fotoceldas
             fotoceldas_seleccionadas = None
             if opcion in ['3', '4']:
@@ -2057,5 +2242,5 @@ if __name__ == "__main__":
                 print("\n👋 ¡Hasta luego!")
                 break
         else:
-            print("\n❌ Opción inválida. Por favor selecciona 0, 1, 2, 3, 4, 5, 6, 7, 8 o 9.")
+            print("\n❌ Opción inválida. Por favor selecciona 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 o 10.")
 

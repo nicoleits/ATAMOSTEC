@@ -11,9 +11,11 @@ import numpy as np
 import logging
 from datetime import datetime, timedelta
 
-# Agregar el directorio de análisis al path
-sys.path.append('/home/nicole/SR/SOILING/analysis')
-sys.path.append('/home/nicole/SR/SOILING')
+# Agregar el directorio de análisis al path - rutas relativas
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = SCRIPT_DIR
+sys.path.append(os.path.join(PROJECT_ROOT, 'analysis'))
+sys.path.append(PROJECT_ROOT)
 
 from config import paths
 
@@ -118,8 +120,10 @@ def process_dustiq_unified_hours():
         logger.error("No hay datos después del filtro de calidad")
         return False
     
-    # 5. Guardar datos procesados
-    output_dir = '/home/nicole/SR/SOILING/datos_procesados_analisis_integrado_py/dustiq'
+    # 5. Guardar datos procesados - ruta relativa al proyecto
+    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+    PROJECT_ROOT = SCRIPT_DIR
+    output_dir = os.path.join(PROJECT_ROOT, 'datos_procesados_analisis_integrado_py', 'dustiq')
     os.makedirs(output_dir, exist_ok=True)
     
     output_file = os.path.join(output_dir, 'dustiq_sr_unified_hours_oct_mar.csv')

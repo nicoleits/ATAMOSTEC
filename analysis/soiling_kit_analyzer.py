@@ -201,6 +201,25 @@ def analyze_soiling_kit_data(raw_data_filepath: str) -> bool:
         
         logger.info(f"Soiling Ratios filtrados (SR > {sr_threshold}%).")
 
+        # --- 7.5. Análisis de Propagación de Incertidumbre de SR ---
+        logger.info("Iniciando análisis de propagación de incertidumbre de SR (Soiling Kit)...")
+        try:
+            from analysis.sr_uncertainty_soiling_kit import run_uncertainty_propagation_analysis
+            # Ejecutar análisis con corrección de temperatura (más común)
+            uncertainty_success = run_uncertainty_propagation_analysis(
+                df_sk,
+                use_temp_correction=True
+            )
+            if uncertainty_success:
+                logger.info("✅ Análisis de propagación de incertidumbre completado exitosamente (SR con corrección de temperatura).")
+            else:
+                logger.warning("⚠️  El análisis de propagación de incertidumbre no se completó exitosamente.")
+        except ImportError as e:
+            logger.error(f"No se pudo importar el módulo 'sr_uncertainty_soiling_kit': {e}")
+        except Exception as e:
+            logger.error(f"Error al ejecutar el análisis de propagación de incertidumbre: {e}", exc_info=True)
+        # Continuar con el resto del análisis aunque falle la incertidumbre
+
         # --- 8. Guardar CSVs ---
         # Datos procesados (con Isc corregidas y SRs calculados antes de filtrar SR)
         df_sk[['Original_Timestamp_Col', isc_soiled_col, isc_ref_col, temp_soiled_col, temp_ref_col, 

@@ -3,6 +3,11 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 from datetime import datetime
+import os
+
+# Configurar rutas relativas al proyecto
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)  # Subir un nivel desde analysis/
 
 # Configurar estilo de los gráficos
 plt.style.use('default')
@@ -12,7 +17,7 @@ plt.rcParams['font.size'] = 10
 
 def cargar_datos():
     """Cargar y preparar los datos para análisis"""
-    df = pd.read_csv('/home/nicole/SR/SOILING/resultados_diferencias_masas.csv')
+    df = pd.read_csv(os.path.join(PROJECT_ROOT, 'resultados_diferencias_masas.csv'))
     
     # Filtrar para excluir datos de "2 Meses"
     df = df[df['Periodo'] != '2 Meses'].copy()
@@ -55,7 +60,7 @@ def crear_tabla_resumen_por_periodo(df):
     print(resumen)
     
     # Guardar tabla
-    resumen.to_csv('/home/nicole/SR/SOILING/tabla_resumen_periodos.csv')
+    resumen.to_csv(os.path.join(PROJECT_ROOT, 'tabla_resumen_periodos.csv'))
     print(f"\n✅ Tabla guardada en: tabla_resumen_periodos.csv")
     
     return resumen
@@ -101,7 +106,7 @@ def crear_tabla_estadisticas_generales(df):
     print(df_stats.to_string(index=False))
     
     # Guardar tabla
-    df_stats.to_csv('/home/nicole/SR/SOILING/estadisticas_generales.csv', index=False)
+    df_stats.to_csv(os.path.join(PROJECT_ROOT, 'estadisticas_generales.csv'), index=False)
     print(f"\n✅ Estadísticas guardadas en: estadisticas_generales.csv")
 
 def grafico_boxplot_por_periodo(df):
@@ -130,7 +135,7 @@ def grafico_boxplot_por_periodo(df):
     axes[1,1].tick_params(axis='x', rotation=45)
     
     plt.tight_layout()
-    plt.savefig('/home/nicole/SR/SOILING/graficos_analisis_integrado_py/boxplot_masas_por_periodo.png', 
+    plt.savefig(os.path.join(PROJECT_ROOT, 'graficos_analisis_integrado_py', 'boxplot_masas_por_periodo.png'), 
                 dpi=300, bbox_inches='tight')
     plt.show()
     print("✅ Boxplot guardado en: graficos_analisis_integrado_py/boxplot_masas_por_periodo.png")
@@ -169,7 +174,7 @@ def grafico_scatter_dias_vs_masa(df):
     axes[1,1].grid(True, alpha=0.3)
     
     plt.tight_layout()
-    plt.savefig('/home/nicole/SR/SOILING/graficos_analisis_integrado_py/scatter_dias_vs_masa.png', 
+    plt.savefig(os.path.join(PROJECT_ROOT, 'graficos_analisis_integrado_py', 'scatter_dias_vs_masa.png'), 
                 dpi=300, bbox_inches='tight')
     plt.show()
     print("✅ Scatter plot guardado en: graficos_analisis_integrado_py/scatter_dias_vs_masa.png")
@@ -193,7 +198,7 @@ def grafico_scatter_dias_vs_promedio(df):
     ax.grid(True, alpha=0.3)
     
     plt.tight_layout()
-    plt.savefig('/home/nicole/SR/SOILING/graficos_analisis_integrado_py/scatter_dias_vs_promedio.png', 
+    plt.savefig(os.path.join(PROJECT_ROOT, 'graficos_analisis_integrado_py', 'scatter_dias_vs_promedio.png'), 
                 dpi=300, bbox_inches='tight')
     plt.show()
     print("✅ Scatter plot de promedios guardado en: graficos_analisis_integrado_py/scatter_dias_vs_promedio.png")
@@ -234,7 +239,7 @@ def grafico_barras_promedio_por_periodo(df):
                        ha='center', va='bottom', fontsize=8)
     
     plt.tight_layout()
-    plt.savefig('/home/nicole/SR/SOILING/graficos_analisis_integrado_py/barras_promedio_periodo.png', 
+    plt.savefig(os.path.join(PROJECT_ROOT, 'graficos_analisis_integrado_py', 'barras_promedio_periodo.png'), 
                 dpi=300, bbox_inches='tight')
     plt.show()
     print("✅ Gráfico de barras guardado en: graficos_analisis_integrado_py/barras_promedio_periodo.png")
@@ -271,7 +276,7 @@ def grafico_boxplot_agrupado_por_periodo(df):
     ax2.grid(True, alpha=0.3)
     
     plt.tight_layout()
-    plt.savefig('/home/nicole/SR/SOILING/graficos_analisis_integrado_py/boxplot_agrupado_por_periodo.png', 
+    plt.savefig(os.path.join(PROJECT_ROOT, 'graficos_analisis_integrado_py', 'boxplot_agrupado_por_periodo.png'), 
                 dpi=300, bbox_inches='tight')
     plt.show()
     print("✅ Boxplot agrupado guardado en: graficos_analisis_integrado_py/boxplot_agrupado_por_periodo.png")
@@ -318,7 +323,7 @@ def grafico_barras_individuales_por_periodo(df):
                            ha='center', va='bottom', fontsize=8)
     
     plt.tight_layout()
-    plt.savefig('/home/nicole/SR/SOILING/graficos_analisis_integrado_py/barras_individuales_por_periodo.png', 
+    plt.savefig(os.path.join(PROJECT_ROOT, 'graficos_analisis_integrado_py', 'barras_individuales_por_periodo.png'), 
                 dpi=300, bbox_inches='tight')
     plt.show()
     print("✅ Gráfico de barras individuales guardado en: graficos_analisis_integrado_py/barras_individuales_por_periodo.png")
@@ -371,7 +376,7 @@ def grafico_barras_promedio_general(df):
                        ha='center', va='bottom', fontsize=10, fontweight='bold')
     
     plt.tight_layout()
-    plt.savefig('/home/nicole/SR/SOILING/graficos_analisis_integrado_py/barras_promedio_general.png', 
+    plt.savefig(os.path.join(PROJECT_ROOT, 'graficos_analisis_integrado_py', 'barras_promedio_general.png'), 
                 dpi=300, bbox_inches='tight')
     plt.show()
     print("✅ Gráfico de barras promedio general guardado en: graficos_analisis_integrado_py/barras_promedio_general.png")
@@ -427,7 +432,7 @@ def grafico_barras_promedio_general_sin_anual(df):
                        ha='center', va='bottom', fontsize=12, fontweight='bold')
     
     plt.tight_layout()
-    plt.savefig('/home/nicole/SR/SOILING/graficos_analisis_integrado_py/barras_promedio_general_sin_anual.png', 
+    plt.savefig(os.path.join(PROJECT_ROOT, 'graficos_analisis_integrado_py', 'barras_promedio_general_sin_anual.png'), 
                 dpi=300, bbox_inches='tight')
     plt.show()
     print("✅ Gráfico de barras promedio general (sin anual) guardado en: graficos_analisis_integrado_py/barras_promedio_general_sin_anual.png")
@@ -459,7 +464,7 @@ def grafico_heatmap_periodo_masa(df):
     ax.tick_params(axis='x', rotation=45)
     
     plt.tight_layout()
-    plt.savefig('/home/nicole/SR/SOILING/graficos_analisis_integrado_py/heatmap_periodo_masa.png', 
+    plt.savefig(os.path.join(PROJECT_ROOT, 'graficos_analisis_integrado_py', 'heatmap_periodo_masa.png'), 
                 dpi=300, bbox_inches='tight')
     plt.show()
     print("✅ Heatmap guardado en: graficos_analisis_integrado_py/heatmap_periodo_masa.png")
@@ -496,7 +501,7 @@ def crear_tabla_detallada_por_periodo(df):
     print(df_tabla.to_string(index=False))
     
     # Guardar tabla
-    df_tabla.to_csv('/home/nicole/SR/SOILING/tabla_detallada_por_periodo.csv', index=False)
+    df_tabla.to_csv(os.path.join(PROJECT_ROOT, 'tabla_detallada_por_periodo.csv'), index=False)
     print(f"\n✅ Tabla detallada guardada en: tabla_detallada_por_periodo.csv")
     
     return df_tabla

@@ -716,6 +716,37 @@ def analyze_pvstand_data(
         df_data_used_for_sr.to_csv(csv_filename_sr_data)
         logger.info(f"Datos completos utilizados para cálculos de SR guardados en: {csv_filename_sr_data}")
 
+    # --- Propagación de Errores (GUM) ---
+    if not df_merged_for_corr.empty:
+        logger.info("Iniciando análisis de propagación de incertidumbre de SR (PVStand)...")
+        try:
+            from analysis.sr_uncertainty_pvstand import run_uncertainty_propagation_analysis
+            # Ejecutar análisis para Isc (con corrección de temperatura)
+            uncertainty_success_isc = run_uncertainty_propagation_analysis(
+                df_merged_for_corr,
+                sr_type='Isc',
+                use_temp_correction=True
+            )
+            if uncertainty_success_isc:
+                logger.info("✅ Análisis de propagación de incertidumbre completado exitosamente (SR_Isc con corrección de temperatura).")
+            else:
+                logger.warning("⚠️  El análisis de propagación de incertidumbre para SR_Isc no se completó exitosamente.")
+            
+            # Ejecutar análisis para Pmax (con corrección de temperatura)
+            uncertainty_success_pmax = run_uncertainty_propagation_analysis(
+                df_merged_for_corr,
+                sr_type='Pmax',
+                use_temp_correction=True
+            )
+            if uncertainty_success_pmax:
+                logger.info("✅ Análisis de propagación de incertidumbre completado exitosamente (SR_Pmax con corrección de temperatura).")
+            else:
+                logger.warning("⚠️  El análisis de propagación de incertidumbre para SR_Pmax no se completó exitosamente.")
+        except ImportError as e:
+            logger.error(f"No se pudo importar el módulo 'sr_uncertainty_pvstand': {e}")
+        except Exception as e:
+            logger.error(f"Error al ejecutar análisis de propagación de incertidumbre: {e}", exc_info=True)
+
     df_sr_to_save_main = pd.DataFrame({
         sr_isc_pvstand.name: sr_isc_pvstand,
         sr_pmax_pvstand.name: sr_pmax_pvstand,
@@ -820,6 +851,51 @@ def analyze_pvstand_data(
         nombre = nombre.replace('Raw', '').replace('NoOffset', '').replace('_', ' ').replace('SR ', 'SR ').strip()
         return nombre
 
+    # Cargar datos de incertidumbre semanal y diaria para barras de error
+    uncertainty_data_weekly_isc = None
+    uncertainty_data_weekly_pmax = None
+    uncertainty_data_daily_isc = None
+    uncertainty_data_daily_pmax = None
+    
+    try:
+        # Cargar incertidumbre semanal Isc
+        uncertainty_file_weekly_isc = os.path.join(paths.PROPAGACION_ERRORES_PVSTAND_DIR, "sr_isc_weekly_abs_with_U.csv")
+        if os.path.exists(uncertainty_file_weekly_isc):
+            df_uncertainty = pd.read_csv(uncertainty_file_weekly_isc, index_col='timestamp', parse_dates=True)
+            if df_uncertainty.index.tz is None:
+                df_uncertainty.index = df_uncertainty.index.tz_localize('UTC')
+            uncertainty_data_weekly_isc = df_uncertainty
+            logger.info(f"Datos de incertidumbre semanal Isc cargados: {len(uncertainty_data_weekly_isc)} puntos")
+        
+        # Cargar incertidumbre semanal Pmax
+        uncertainty_file_weekly_pmax = os.path.join(paths.PROPAGACION_ERRORES_PVSTAND_DIR, "sr_pmax_weekly_abs_with_U.csv")
+        if os.path.exists(uncertainty_file_weekly_pmax):
+            df_uncertainty = pd.read_csv(uncertainty_file_weekly_pmax, index_col='timestamp', parse_dates=True)
+            if df_uncertainty.index.tz is None:
+                df_uncertainty.index = df_uncertainty.index.tz_localize('UTC')
+            uncertainty_data_weekly_pmax = df_uncertainty
+            logger.info(f"Datos de incertidumbre semanal Pmax cargados: {len(uncertainty_data_weekly_pmax)} puntos")
+        
+        # Cargar incertidumbre diaria Isc (para gráficos de 3 días)
+        uncertainty_file_daily_isc = os.path.join(paths.PROPAGACION_ERRORES_PVSTAND_DIR, "sr_isc_daily_abs_with_U.csv")
+        if os.path.exists(uncertainty_file_daily_isc):
+            df_uncertainty = pd.read_csv(uncertainty_file_daily_isc, index_col='timestamp', parse_dates=True)
+            if df_uncertainty.index.tz is None:
+                df_uncertainty.index = df_uncertainty.index.tz_localize('UTC')
+            uncertainty_data_daily_isc = df_uncertainty
+            logger.info(f"Datos de incertidumbre diaria Isc cargados: {len(uncertainty_data_daily_isc)} puntos")
+        
+        # Cargar incertidumbre diaria Pmax (para gráficos de 3 días)
+        uncertainty_file_daily_pmax = os.path.join(paths.PROPAGACION_ERRORES_PVSTAND_DIR, "sr_pmax_daily_abs_with_U.csv")
+        if os.path.exists(uncertainty_file_daily_pmax):
+            df_uncertainty = pd.read_csv(uncertainty_file_daily_pmax, index_col='timestamp', parse_dates=True)
+            if df_uncertainty.index.tz is None:
+                df_uncertainty.index = df_uncertainty.index.tz_localize('UTC')
+            uncertainty_data_daily_pmax = df_uncertainty
+            logger.info(f"Datos de incertidumbre diaria Pmax cargados: {len(uncertainty_data_daily_pmax)} puntos")
+    except Exception as e:
+        logger.warning(f"No se pudieron cargar datos de incertidumbre de PVStand: {e}")
+
     def _plot_sr_section_internal(df_to_plot, title_prefix, filename_suffix, is_normalized_section_flag_param):
         if df_to_plot.empty:
             logger.info(f"No hay datos para graficar en la sección: {title_prefix}")
@@ -857,10 +933,63 @@ def analyze_pvstand_data(
                     else:
                         data_agg = series_plot.resample(resample_rule_str).quantile(graph_quantile).dropna()
                     if not data_agg.empty:
-                        ax.plot(data_agg.index, data_agg.values, 
-                                linestyle=line_styles[i % len(line_styles)], 
-                                marker=markers[i % len(markers)] if 'Media Móvil' not in plot_desc_agg_str else None, 
-                                markersize=base_markersize, alpha=0.8, label=limpiar_leyenda(col_name_plot), color=colores_fijos[i % len(colores_fijos)])
+                        # Detectar tipo de SR (Isc o Pmax) basándose en el nombre de la columna
+                        is_isc = 'isc' in col_name_plot.lower()
+                        is_pmax = 'pmax' in col_name_plot.lower()
+                        
+                        # Determinar qué archivo de incertidumbre usar
+                        if resample_rule_str == '1W':  # Semanal
+                            uncertainty_data = uncertainty_data_weekly_isc if is_isc else (uncertainty_data_weekly_pmax if is_pmax else None)
+                        else:  # 3D (usar datos diarios)
+                            uncertainty_data = uncertainty_data_daily_isc if is_isc else (uncertainty_data_daily_pmax if is_pmax else None)
+                        
+                        # Agregar barras de error si hay datos de incertidumbre
+                        if uncertainty_data is not None and 'U_rel_k2' in uncertainty_data.columns:
+                            yerr = []
+                            uncertainty_index = uncertainty_data.index
+                            # Asegurar que las fechas tengan el mismo timezone
+                            if data_agg.index.tz is None and uncertainty_index.tz is not None:
+                                data_agg.index = data_agg.index.tz_localize('UTC')
+                            elif data_agg.index.tz is not None and uncertainty_index.tz is None:
+                                uncertainty_index = uncertainty_index.tz_localize('UTC')
+                            elif data_agg.index.tz is not None and uncertainty_index.tz is not None:
+                                uncertainty_index = uncertainty_index.tz_convert(data_agg.index.tz)
+                            
+                            for j, date in enumerate(data_agg.index):
+                                sr_val = data_agg.iloc[j]
+                                if pd.notna(sr_val):
+                                    if date in uncertainty_index:
+                                        u_rel = uncertainty_data.loc[date, 'U_rel_k2']
+                                    else:
+                                        time_diffs = abs(uncertainty_index - date)
+                                        closest_idx = time_diffs.argmin()
+                                        max_timedelta = pd.Timedelta(days=3) if resample_rule_str == '1W' else pd.Timedelta(days=1)
+                                        if time_diffs[closest_idx] <= max_timedelta:
+                                            u_rel = uncertainty_data.iloc[closest_idx]['U_rel_k2']
+                                        else:
+                                            u_rel = np.nan
+                                    
+                                    if pd.notna(u_rel):
+                                        yerr.append(u_rel * sr_val / 100.0)
+                                    else:
+                                        yerr.append(0)
+                                else:
+                                    yerr.append(0)
+                            
+                            errorbar_result = ax.errorbar(data_agg.index, data_agg.values, yerr=yerr,
+                                                         linestyle=line_styles[i % len(line_styles)],
+                                                         marker=markers[i % len(markers)] if 'Media Móvil' not in plot_desc_agg_str else None,
+                                                         markersize=base_markersize, alpha=0.8, 
+                                                         label=limpiar_leyenda(col_name_plot), 
+                                                         color=colores_fijos[i % len(colores_fijos)],
+                                                         capsize=3, capthick=1.5, elinewidth=1.5, 
+                                                         ecolor=colores_fijos[i % len(colores_fijos)])
+                        else:
+                            # Graficar sin barras de error
+                            ax.plot(data_agg.index, data_agg.values, 
+                                    linestyle=line_styles[i % len(line_styles)], 
+                                    marker=markers[i % len(markers)] if 'Media Móvil' not in plot_desc_agg_str else None, 
+                                    markersize=base_markersize, alpha=0.8, label=limpiar_leyenda(col_name_plot), color=colores_fijos[i % len(colores_fijos)])
                         has_data_for_this_agg_plot = True
                         # --- Línea de tendencia global, solo para el gráfico semanal normalizado ---
                         if filename_suffix == 'norm' and 'semanal' in plot_desc_agg_str.lower():
@@ -1117,13 +1246,13 @@ def run_analysis():
     Función estándar para ejecutar el análisis de PVStand.
     Usa la configuración centralizada para rutas y parámetros.
     """
-    pv_iv_data_filepath = os.path.join(paths.BASE_INPUT_DIR, paths.PVSTAND_IV_DATA_FILENAME)
-    temperature_data_filepath = os.path.join(paths.BASE_INPUT_DIR, paths.PVSTAND_TEMP_DATA_FILENAME)
+    pv_iv_data_filepath = paths.PVSTAND_IV_DATA_FILE
+    temperature_data_filepath = paths.PVSTAND_TEMP_DATA_FILE
     return analyze_pvstand_data(pv_iv_data_filepath, temperature_data_filepath)
 
 if __name__ == "__main__":
     # Solo se ejecuta cuando el archivo se ejecuta directamente
     print("[INFO] Ejecutando análisis de PVStand...")
-    pv_iv_data_filepath = os.path.join(paths.BASE_INPUT_DIR, paths.PVSTAND_IV_DATA_FILENAME)
-    temperature_data_filepath = os.path.join(paths.BASE_INPUT_DIR, paths.PVSTAND_TEMP_DATA_FILENAME)
+    pv_iv_data_filepath = paths.PVSTAND_IV_DATA_FILE
+    temperature_data_filepath = paths.PVSTAND_TEMP_DATA_FILE
     analyze_pvstand_data(pv_iv_data_filepath, temperature_data_filepath) 

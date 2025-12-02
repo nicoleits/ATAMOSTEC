@@ -1188,6 +1188,28 @@ def run_analysis():
             plot_soiling_ratios_por_periodo(df_sr, output_graph_dir)
         else:
             logger.error(f"Archivo de Soiling Ratios no encontrado: {path_sr_csv}")
+        
+        # --- Propagación de Errores (GUM) ---
+        logger.info("Iniciando análisis de propagación de incertidumbre de SR (PV Glasses)...")
+        try:
+            from analysis.sr_uncertainty_pv_glasses import run_uncertainty_propagation_analysis_pv_glasses
+            # Usar el archivo de irradiancia seleccionada (antes de calcular SR) como entrada
+            path_irradiancia_input = os.path.join(output_csv_dir, "seleccion_irradiancia_post_exposicion.csv")
+            if os.path.exists(path_irradiancia_input):
+                uncertainty_success = run_uncertainty_propagation_analysis_pv_glasses(
+                    input_file=path_irradiancia_input,
+                    output_dir=None  # Usar el directorio por defecto de paths
+                )
+                if uncertainty_success:
+                    logger.info("✅ Análisis de propagación de incertidumbre completado exitosamente (PV Glasses).")
+                else:
+                    logger.warning("⚠️  El análisis de propagación de incertidumbre no se completó exitosamente.")
+            else:
+                logger.warning(f"Archivo de irradiancia no encontrado para propagación de errores: {path_irradiancia_input}")
+        except ImportError as e:
+            logger.error(f"No se pudo importar el módulo 'sr_uncertainty_pv_glasses': {e}")
+        except Exception as e:
+            logger.error(f"Error al ejecutar análisis de propagación de incertidumbre: {e}", exc_info=True)
 
     except Exception as e:
         logger.error(f"Error en la ejecución principal: {e}", exc_info=True)

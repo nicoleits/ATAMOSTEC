@@ -12,8 +12,10 @@ import sys
 import logging
 from datetime import datetime
 
-# Agregar el directorio de análisis al path
-sys.path.append('/home/nicole/SR/SOILING/analysis')
+# Agregar el directorio de análisis al path - rutas relativas
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = SCRIPT_DIR
+sys.path.append(os.path.join(PROJECT_ROOT, 'analysis'))
 from daily_sr_std_analysis import load_refcells_minute_data, load_soiling_kit_minute_data, calculate_daily_std
 import config.paths as paths
 
@@ -28,7 +30,10 @@ logger = logging.getLogger(__name__)
 def load_dustiq_unified_data():
     """Carga los datos de DustIQ con horario unificado"""
     try:
-        csv_path = '/home/nicole/SR/SOILING/datos_procesados_analisis_integrado_py/dustiq/dustiq_sr_unified_hours_oct_mar.csv'
+        # Ruta relativa al proyecto
+        SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+        PROJECT_ROOT = SCRIPT_DIR
+        csv_path = os.path.join(PROJECT_ROOT, 'datos_procesados_analisis_integrado_py', 'dustiq', 'dustiq_sr_unified_hours_oct_mar.csv')
         
         if not os.path.exists(csv_path):
             logger.error(f"Archivo no encontrado: {csv_path}")
@@ -137,7 +142,10 @@ def create_time_series_plot(daily_std_data):
     plt.tight_layout()
     
     # Guardar gráfico
-    output_dir = '/home/nicole/SR/SOILING/graficos_analisis_integrado_py/analisis_varianza_intraday'
+    # Ruta relativa al proyecto
+    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+    PROJECT_ROOT = SCRIPT_DIR
+    output_dir = os.path.join(PROJECT_ROOT, 'graficos_analisis_integrado_py', 'analisis_varianza_intraday')
     os.makedirs(output_dir, exist_ok=True)
     
     plot_path = os.path.join(output_dir, 'daily_std_timeseries_PVSTAND_SEPARATED_OCT_MAR.png')
@@ -207,7 +215,10 @@ def create_boxplot(daily_std_data):
     plt.tight_layout()
     
     # Guardar gráfico
-    output_dir = '/home/nicole/SR/SOILING/graficos_analisis_integrado_py/analisis_varianza_intraday'
+    # Ruta relativa al proyecto
+    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+    PROJECT_ROOT = SCRIPT_DIR
+    output_dir = os.path.join(PROJECT_ROOT, 'graficos_analisis_integrado_py', 'analisis_varianza_intraday')
     os.makedirs(output_dir, exist_ok=True)
     
     plot_path = os.path.join(output_dir, 'daily_std_boxplot_PVSTAND_SEPARATED_OCT_MAR.png')

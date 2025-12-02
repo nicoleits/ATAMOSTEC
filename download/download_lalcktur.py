@@ -22,7 +22,7 @@ El script guiará al usuario a través de:
 3. Guardado en CSV en el directorio configurado
 
 Los datos descargados se guardan en CSV en el directorio configurado:
-    /home/atamos/atamostec/ATAMOSTEC/ATAMOSTEC/datos/lalcktur/
+    datos/lalcktur/ (relativo al directorio raíz del proyecto)
 
 NOTAS:
 ------
@@ -61,8 +61,11 @@ CLICKHOUSE_CONFIG = {
 DEFAULT_START_DATE = pd.to_datetime('01/07/2024', dayfirst=True).tz_localize('UTC')
 DEFAULT_END_DATE = pd.to_datetime('31/12/2025', dayfirst=True).tz_localize('UTC')
 
-# Directorio de salida
-OUTPUT_DIR = "/home/atamos/atamostec/ATAMOSTEC/ATAMOSTEC/datos"
+# Directorio de salida - ruta relativa al directorio del proyecto
+# Obtener el directorio del script y construir la ruta relativa
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))  # Subir dos niveles desde download/
+OUTPUT_DIR = os.path.join(PROJECT_ROOT, "datos")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # Atributos a descargar

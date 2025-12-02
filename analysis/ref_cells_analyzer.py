@@ -8,11 +8,14 @@ import matplotlib.dates as mdates
 import pytz
 import re
 from datetime import timezone
+from typing import Optional
 import scipy.stats as stats
 
 from config.logging_config import logger
 from config import paths, settings
 from utils.helpers import save_plot_matplotlib
+from utils.solar_time import UtilsMedioDiaSolar
+from datetime import timezone
 
 def _adjust_series_start_to_100(series: pd.Series, series_name_for_log: str) -> pd.Series:
     """
@@ -26,6 +29,40 @@ def _adjust_series_start_to_100(series: pd.Series, series_name_for_log: str) -> 
     offset = 100 - first_valid_value
     logger.info(f"Ajustando serie '{series_name_for_log}' con offset: {offset:.2f} (primer valor válido: {first_valid_value:.2f})")
     return series + offset
+
+def _calculate_ylim_from_data(series: pd.Series, margin_percent: float = 0.1) -> tuple:
+    """
+    Calcula los límites del eje Y basándose en los datos reales, agregando un margen.
+    
+    Args:
+        series: Serie de datos para calcular los límites
+        margin_percent: Porcentaje de margen a agregar arriba y abajo (default: 10%)
+    
+    Returns:
+        tuple: (ymin, ymax) para usar en set_ylim
+    """
+    if series.empty or series.dropna().empty:
+        return (0, 200)  # Valores por defecto si no hay datos
+    
+    valid_data = series.dropna()
+    y_min = valid_data.min()
+    y_max = valid_data.max()
+    
+    # Calcular el rango y agregar margen
+    y_range = y_max - y_min
+    if y_range == 0:
+        # Si todos los valores son iguales, usar un rango mínimo
+        y_range = max(abs(y_min) * 0.1, 10)
+    
+    margin = y_range * margin_percent
+    y_min_adj = y_min - margin
+    y_max_adj = y_max + margin
+    
+    # Asegurar que no sea negativo si todos los valores son positivos
+    if y_min >= 0 and y_min_adj < 0:
+        y_min_adj = 0
+    
+    return (y_min_adj, y_max_adj)
 
 def analyze_ref_cells_data(raw_data_filepath: str) -> bool:
     """
@@ -126,10 +163,21 @@ def analyze_ref_cells_data(raw_data_filepath: str) -> bool:
             return True
 
         # --- 4. Cálculo de Soiling Ratios (SR) ---
+        # Umbral mínimo de irradiancia para calcular SR (filtrar datos de baja irradiancia/noche)
+        min_irradiance_threshold = settings.MIN_IRRADIANCE  # 200 W/m² por defecto
+        
+        # Filtrar por irradiancia mínima: la celda de referencia debe tener irradiancia >= umbral
+        # Esto elimina datos nocturnos y de baja irradiancia donde el SR no es confiable
+        mask_irradiance_valid = df_ref_cells[ref_col] >= min_irradiance_threshold
+        n_filtered_by_irradiance = (~mask_irradiance_valid).sum()
+        if n_filtered_by_irradiance > 0:
+            logger.info(f"Filtrados {n_filtered_by_irradiance} datos con irradiancia < {min_irradiance_threshold} W/m² antes de calcular SR")
+        
         sr_df = pd.DataFrame(index=df_ref_cells.index)
         for soiled_col in valid_soiled_cols:
-            # Asegurar que el denominador no sea cero
-            mask_denom_valid = df_ref_cells[ref_col] > 0
+            # Asegurar que el denominador no sea cero Y que la irradiancia sea >= umbral
+            mask_denom_valid = mask_irradiance_valid & (df_ref_cells[ref_col] > 0)
+            
             sr_df[soiled_col] = np.nan # Inicializar
             sr_df.loc[mask_denom_valid, soiled_col] = (df_ref_cells.loc[mask_denom_valid, soiled_col] / df_ref_cells.loc[mask_denom_valid, ref_col]) * 100
         
@@ -286,7 +334,8 @@ def analyze_ref_cells_data(raw_data_filepath: str) -> bool:
             ax_w.set_ylabel(f'Soiling Ratio{" Adjusted" if settings.REFCELLS_ADJUST_TO_100_FLAG else ""} [%]')
             ax_w.set_xlabel('Week')
             ax_w.set_title(f'Soiling Ratio{" Adjusted" if settings.REFCELLS_ADJUST_TO_100_FLAG else ""} - Reference Cells (Weekly Q25)')
-            ax_w.set_ylim([90, 110])
+            # Límites fijos del eje Y: 50% a 110%
+            ax_w.set_ylim([50, 110])
             ax_w.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
             plt.xticks(rotation=45, ha='right')
             plt.tight_layout()
@@ -300,6 +349,18 @@ def analyze_ref_cells_data(raw_data_filepath: str) -> bool:
             if 'fig_w' in locals() and plt.fignum_exists(fig_w.number): plt.close(fig_w)
 
         # --- 8.3 Gráfico SR Diario Combinado (Ajustado si aplica) ---
+        # Cargar datos de incertidumbre diaria para barras de error
+        uncertainty_data_daily = None
+        try:
+            uncertainty_file = paths.SR_DAILY_ABS_WITH_U_FILE
+            if os.path.exists(uncertainty_file):
+                df_uncertainty = pd.read_csv(uncertainty_file, index_col='timestamp', parse_dates=True)
+                if df_uncertainty.index.tz is None:
+                    df_uncertainty.index = df_uncertainty.index.tz_localize('UTC')
+                uncertainty_data_daily = df_uncertainty
+        except Exception as e:
+            logger.warning(f"No se pudieron cargar datos de incertidumbre diaria para gráfico combinado: {e}")
+        
         fig_d, ax_d = plt.subplots(figsize=(12, 6))
         plotted_daily_sr = False
         for col in valid_soiled_cols:
@@ -312,7 +373,35 @@ def analyze_ref_cells_data(raw_data_filepath: str) -> bool:
                     serie_d_adj = serie_d
                 
                 if not serie_d_adj.dropna().empty:
-                    serie_d_adj.plot(ax=ax_d, style='o-', alpha=0.85, label=f'SR Photocells', linewidth=1)
+                    # Intentar agregar barras de error si hay datos de incertidumbre
+                    if uncertainty_data_daily is not None and 'U_rel_k2' in uncertainty_data_daily.columns:
+                        uncertainty_index = uncertainty_data_daily.index
+                        yerr = []
+                        for date in serie_d_adj.index:
+                            sr_val = serie_d_adj.loc[date]
+                            if pd.notna(sr_val):
+                                if date in uncertainty_index:
+                                    u_rel = uncertainty_data_daily.loc[date, 'U_rel_k2']
+                                else:
+                                    time_diffs = abs(uncertainty_index - date)
+                                    closest_idx = time_diffs.argmin()
+                                    if time_diffs[closest_idx] <= pd.Timedelta(days=1):
+                                        u_rel = uncertainty_data_daily.iloc[closest_idx]['U_rel_k2']
+                                    else:
+                                        u_rel = np.nan
+                                
+                                if pd.notna(u_rel):
+                                    yerr.append(u_rel * sr_val / 100.0)
+                                else:
+                                    yerr.append(0)
+                            else:
+                                yerr.append(0)
+                        
+                        ax_d.errorbar(serie_d_adj.index, serie_d_adj.values, yerr=yerr, fmt='o-', 
+                                     alpha=0.85, label=f'SR Photocells', linewidth=1, capsize=3, 
+                                     capthick=1.5, elinewidth=1.5, ecolor='lightblue')
+                    else:
+                        serie_d_adj.plot(ax=ax_d, style='o-', alpha=0.85, label=f'SR Photocells', linewidth=1)
                     plotted_daily_sr = True
 
         if plotted_daily_sr:
@@ -320,7 +409,8 @@ def analyze_ref_cells_data(raw_data_filepath: str) -> bool:
             ax_d.set_ylabel(f'Soiling Ratio{" Adjusted" if settings.REFCELLS_ADJUST_TO_100_FLAG else ""} [%]')
             ax_d.set_xlabel('Day')
             ax_d.set_title(f'Soiling Ratio{" Adjusted" if settings.REFCELLS_ADJUST_TO_100_FLAG else ""} - Reference Cells (Daily Q25)')
-            ax_d.set_ylim([90, 110])
+            # Límites fijos del eje Y: 50% a 110%
+            ax_d.set_ylim([50, 110])
             ax_d.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
             plt.xticks(rotation=45, ha='right')
             plt.tight_layout()
@@ -353,7 +443,7 @@ def analyze_ref_cells_data(raw_data_filepath: str) -> bool:
                     ax_w_ind.set_xlabel('Week')
                     ax_w_ind.set_title('Soiling Ratio with Reference Cells')
                     ax_w_ind.grid(True, which='both', linestyle='--'); ax_w_ind.legend(loc='best')
-                    ax_w_ind.set_ylim([90, 110])
+                    ax_w_ind.set_ylim([50, 110])
                     ax_w_ind.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
                     plt.xticks(rotation=45, ha='right'); plt.tight_layout()
                     if settings.SAVE_FIGURES:
@@ -381,7 +471,7 @@ def analyze_ref_cells_data(raw_data_filepath: str) -> bool:
                     ax_d_ind.set_xlabel('Day')
                     ax_d_ind.set_title(f'SR{" Adj." if settings.REFCELLS_ADJUST_TO_100_FLAG else ""} - {col} (Daily Q25)')
                     ax_d_ind.grid(True, which='both', linestyle='--'); ax_d_ind.legend(loc='best')
-                    ax_d_ind.set_ylim([90, 110])
+                    ax_d_ind.set_ylim([50, 110])
                     ax_d_ind.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
                     plt.xticks(rotation=45, ha='right'); plt.tight_layout()
                     if settings.SAVE_FIGURES:
@@ -445,10 +535,467 @@ def analyze_ref_cells_data(raw_data_filepath: str) -> bool:
     
     return False 
 
+
+def filter_by_solar_noon(df: pd.DataFrame, hours_window: float = 2.5) -> pd.DataFrame:
+    """
+    Filtra un DataFrame por rangos de medio día solar dinámicos.
+    
+    Args:
+        df: DataFrame con índice DatetimeIndex en UTC
+        hours_window: Ventana en horas alrededor del medio día solar (total = 2 * hours_window)
+    
+    Returns:
+        DataFrame filtrado por medio día solar
+    """
+    if df.empty:
+        return df
+        
+    logger.info(f"Aplicando filtro de medio día solar (±{hours_window} horas alrededor del medio día solar real)")
+    logger.info(f"DataFrame original: {len(df)} filas, rango: {df.index.min()} a {df.index.max()}")
+    
+    # Obtener rango de fechas del DataFrame
+    start_date = df.index.min().date()
+    end_date = df.index.max().date()
+    
+    logger.info(f"Rango de fechas para cálculo solar: {start_date} a {end_date}")
+    
+    # Inicializar utilidades de medio día solar con parámetros correctos
+    solar_utils = UtilsMedioDiaSolar(
+        datei=start_date,
+        datef=end_date,
+        freq='D',
+        inter=int(hours_window * 2 * 60),  # Convertir horas a minutos
+        tz_local_str=settings.DUSTIQ_LOCAL_TIMEZONE_STR,
+        lat=settings.SITE_LATITUDE,
+        lon=settings.SITE_LONGITUDE,
+        alt=settings.SITE_ALTITUDE
+    )
+    
+    # Obtener intervalos de medio día solar
+    solar_intervals_df = solar_utils.msd()
+    
+    if solar_intervals_df.empty:
+        logger.warning("No se pudieron calcular intervalos de medio día solar. Retornando DataFrame vacío.")
+        return pd.DataFrame()
+    
+    logger.info(f"Intervalos solares calculados: {len(solar_intervals_df)}")
+    
+    # Crear máscara para filtrar por medio día solar
+    mask = pd.Series(False, index=df.index)
+    
+    # Asegurar que el índice del DataFrame esté en UTC
+    df_utc = df.copy()
+    if df_utc.index.tz is None:
+        df_utc.index = df_utc.index.tz_localize('UTC')
+    elif df_utc.index.tz != timezone.utc:
+        df_utc.index = df_utc.index.tz_convert('UTC')
+    
+    logger.info(f"DataFrame convertido a UTC: {len(df_utc)} filas, rango: {df_utc.index.min()} a {df_utc.index.max()}")
+    
+    # Aplicar cada intervalo de medio día solar
+    for i, (_, row) in enumerate(solar_intervals_df.iterrows()):
+        # Los intervalos ya están en UTC naive, convertirlos a UTC aware
+        start_time = pd.Timestamp(row[0]).tz_localize('UTC')
+        end_time = pd.Timestamp(row[1]).tz_localize('UTC')
+        
+        # Aplicar máscara para este intervalo
+        interval_mask = (df_utc.index >= start_time) & (df_utc.index <= end_time)
+        mask = mask | interval_mask
+    
+    filtered_df = df_utc[mask]
+    logger.info(f"Filtro de medio día solar aplicado: {len(df)} -> {len(filtered_df)} puntos ({len(filtered_df)/len(df)*100:.1f}%)")
+    
+    if filtered_df.empty:
+        logger.warning("⚠️ DataFrame vacío después del filtro solar.")
+    
+    return filtered_df
+
+
+def analyze_ref_cells_data_solar_noon(raw_data_filepath: str, hours_window: float = 2.5) -> bool:
+    """
+    Analiza los datos de las celdas de referencia filtrando solo por horario de mediodía solar.
+    Similar a analyze_ref_cells_data pero aplica filtro de mediodía solar antes del procesamiento.
+    Los resultados se guardan en carpetas separadas (mediodia_solar).
+    
+    Args:
+        raw_data_filepath: Ruta al archivo CSV con datos crudos de refcells
+        hours_window: Ventana en horas alrededor del medio día solar (default: 2.5 horas)
+    
+    Returns:
+        bool: True si el análisis fue exitoso, False en caso contrario
+    """
+    print("[INFO] Ejecutando analyze_ref_cells_data_solar_noon...")
+    logger.info("--- Iniciando Análisis de Datos de Celdas de Referencia (Mediodía Solar) ---")
+    
+    # Crear directorios de salida para mediodía solar
+    os.makedirs(paths.REFCELLS_SOLAR_NOON_OUTPUT_SUBDIR_CSV, exist_ok=True)
+    os.makedirs(paths.REFCELLS_SOLAR_NOON_OUTPUT_SUBDIR_GRAPH, exist_ok=True)
+    
+    try:
+        # --- 1. Carga y Preprocesamiento de Datos ---
+        logger.info(f"Cargando datos de celdas de referencia desde: {raw_data_filepath}")
+        df_ref_cells = pd.read_csv(raw_data_filepath, index_col=settings.REFCELLS_TIME_COLUMN)
+        logger.info(f"Datos de celdas de referencia cargados inicialmente: {len(df_ref_cells)} filas.")
+        
+        # Convertir índice a pd.to_datetime, manejar NaT, asegurar UTC
+        df_ref_cells.index = pd.to_datetime(df_ref_cells.index, format=settings.REFCELLS_TIME_FORMAT, errors='coerce')
+        
+        rows_before_nat_drop = len(df_ref_cells)
+        if df_ref_cells.index.hasnans:
+            df_ref_cells = df_ref_cells[pd.notnull(df_ref_cells.index)]
+            logger.info(f"Filas con NaT eliminadas. Antes: {rows_before_nat_drop}, Después: {len(df_ref_cells)}.")
+        
+        if df_ref_cells.empty:
+            logger.warning("DataFrame de celdas de referencia vacío después de eliminar NaTs.")
+            return False
+        
+        if isinstance(df_ref_cells.index, pd.DatetimeIndex):
+            if df_ref_cells.index.tz is None:
+                df_ref_cells.index = df_ref_cells.index.tz_localize('UTC', ambiguous='infer', nonexistent='shift_forward')
+            elif df_ref_cells.index.tz != timezone.utc:
+                df_ref_cells.index = df_ref_cells.index.tz_convert('UTC')
+        
+        df_ref_cells.sort_index(inplace=True)
+        logger.info(f"Índice procesado a UTC. Rango: {df_ref_cells.index.min()} a {df_ref_cells.index.max()}")
+        
+        # --- 1.5. FILTRAR POR MEDIODÍA SOLAR ---
+        logger.info(f"Aplicando filtro de mediodía solar (ventana: ±{hours_window} horas)...")
+        df_ref_cells = filter_by_solar_noon(df_ref_cells, hours_window)
+        
+        if df_ref_cells.empty:
+            logger.warning("No hay datos después del filtro de mediodía solar.")
+            return False
+        
+        logger.info(f"Datos después del filtro de mediodía solar: {len(df_ref_cells)} filas")
+        
+        # --- 2. Filtrado por Fechas Globales ---
+        start_date_analysis = pd.to_datetime(settings.ANALYSIS_START_DATE_GENERAL_STR, utc=True, errors='coerce')
+        end_date_analysis = pd.to_datetime(settings.ANALYSIS_END_DATE_GENERAL_STR, utc=True, errors='coerce')
+        
+        if pd.notna(end_date_analysis) and end_date_analysis.hour == 0 and end_date_analysis.minute == 0:
+            end_date_analysis = end_date_analysis + pd.Timedelta(days=1) - pd.Timedelta(microseconds=1)
+        
+        original_rows_before_date_filter = len(df_ref_cells)
+        if pd.notna(start_date_analysis):
+            df_ref_cells = df_ref_cells[df_ref_cells.index >= start_date_analysis]
+        if pd.notna(end_date_analysis):
+            df_ref_cells = df_ref_cells[df_ref_cells.index <= end_date_analysis]
+        
+        if len(df_ref_cells) < original_rows_before_date_filter:
+            logger.info(f"Datos filtrados por fecha. Antes: {original_rows_before_date_filter}, Después: {len(df_ref_cells)}")
+        
+        if df_ref_cells.empty:
+            logger.warning("No hay datos después del filtrado por fecha.")
+            return True
+        
+        # --- 3. Validación de Columnas ---
+        ref_col = settings.REFCELLS_REFERENCE_COLUMN
+        soiled_cols_config = settings.REFCELLS_SOILED_COLUMNS_TO_ANALYZE
+        
+        if ref_col not in df_ref_cells.columns:
+            logger.error(f"Columna de referencia '{ref_col}' no encontrada. Columnas disponibles: {df_ref_cells.columns.tolist()}")
+            return False
+        
+        valid_soiled_cols = [col for col in soiled_cols_config if col in df_ref_cells.columns]
+        if not valid_soiled_cols:
+            logger.error(f"Ninguna de las columnas 'sucias' especificadas {soiled_cols_config} se encontró. Columnas disponibles: {df_ref_cells.columns.tolist()}")
+            return False
+        
+        logger.info(f"Columna de referencia: {ref_col}. Columnas 'sucias' válidas para análisis: {valid_soiled_cols}")
+        
+        # Convertir a numérico
+        cols_to_convert = [ref_col] + valid_soiled_cols + settings.REFCELLS_IRRADIANCE_COLUMNS_TO_PLOT
+        for col in list(set(cols_to_convert)):
+            if col in df_ref_cells.columns:
+                df_ref_cells[col] = pd.to_numeric(df_ref_cells[col], errors='coerce')
+        df_ref_cells.dropna(subset=[ref_col] + valid_soiled_cols, how='any', inplace=True)
+        
+        if df_ref_cells.empty:
+            logger.warning(f"No hay datos después de convertir a numérico.")
+            return True
+        
+        # --- 4. Cálculo de Soiling Ratios (SR) ---
+        min_irradiance_threshold = settings.MIN_IRRADIANCE
+        
+        sr_df = pd.DataFrame(index=df_ref_cells.index)
+        mask_irradiance_valid = df_ref_cells[ref_col] >= min_irradiance_threshold
+        n_filtered_by_irradiance = (~mask_irradiance_valid).sum()
+        if n_filtered_by_irradiance > 0:
+            logger.info(f"Filtrados {n_filtered_by_irradiance} datos con irradiancia < {min_irradiance_threshold} W/m²")
+        
+        for soiled_col in valid_soiled_cols:
+            mask_denom_valid = mask_irradiance_valid & (df_ref_cells[ref_col] > 0)
+            sr_df[soiled_col] = np.nan
+            sr_df.loc[mask_denom_valid, soiled_col] = (df_ref_cells.loc[mask_denom_valid, soiled_col] / df_ref_cells.loc[mask_denom_valid, ref_col]) * 100
+        
+        logger.info("Soiling Ratios calculados.")
+        sr_df.dropna(how='all', inplace=True)
+        if sr_df.empty:
+            logger.warning("DataFrame de SR vacío después del cálculo.")
+            return True
+        
+        # --- 4.5. Análisis de Propagación de Incertidumbre de SR (Mediodía Solar) ---
+        logger.info("Iniciando análisis de propagación de incertidumbre de SR (mediodía solar)...")
+        try:
+            from analysis.sr_uncertainty_propagation import run_uncertainty_propagation_analysis
+            # Los datos ya están filtrados por mediodía solar
+            # Para el análisis de incertidumbre, usar la primera columna sucia y la columna de referencia
+            # (el módulo de incertidumbre espera una columna sucia y una limpia)
+            soiled_col_for_uncertainty = valid_soiled_cols[0] if valid_soiled_cols else None
+            if soiled_col_for_uncertainty:
+                uncertainty_success = run_uncertainty_propagation_analysis(
+                    df_ref_cells,
+                    soiled_col=soiled_col_for_uncertainty,
+                    clean_col=ref_col,
+                    output_dir=paths.PROPAGACION_ERRORES_SOLAR_NOON_DIR  # Usar directorio de mediodía solar
+                )
+            else:
+                logger.warning("No hay columnas sucias válidas para análisis de incertidumbre")
+                uncertainty_success = False
+            if uncertainty_success:
+                logger.info("✅ Análisis de propagación de incertidumbre completado (mediodía solar).")
+            else:
+                logger.warning("⚠️  El análisis de propagación de incertidumbre no se completó exitosamente.")
+        except ImportError as e:
+            logger.error(f"No se pudo importar el módulo 'sr_uncertainty_propagation': {e}")
+        except Exception as e:
+            logger.error(f"Error al ejecutar el análisis de propagación de incertidumbre: {e}", exc_info=True)
+        
+        # --- 5. Filtrado de SR ---
+        sr_min_val = settings.REFCELLS_SR_MIN_FILTER * 100
+        sr_max_val = settings.REFCELLS_SR_MAX_FILTER * 100
+        
+        sr_filtered_df = sr_df.copy()
+        for col in valid_soiled_cols:
+            if col in sr_filtered_df.columns:
+                condition = (sr_filtered_df[col] >= sr_min_val) & (sr_filtered_df[col] <= sr_max_val)
+                sr_filtered_df[col] = sr_filtered_df[col].where(condition)
+        
+        sr_filtered_df.dropna(how='all', inplace=True)
+        logger.info(f"Soiling Ratios filtrados ({sr_min_val}% - {sr_max_val}%). Filas restantes: {len(sr_filtered_df)}")
+        if sr_filtered_df.empty:
+            logger.warning("DataFrame de SR filtrado está vacío.")
+            return True
+        
+        # --- 6. Preparar DataFrames para CSV (Minutal, Diario Q25, Semanal Q25) ---
+        # Guardar SRs filtrados (minutales)
+        sr_minute_filename = os.path.join(paths.REFCELLS_SOLAR_NOON_OUTPUT_SUBDIR_CSV, 'sr_minute_filtered.csv')
+        sr_filtered_df.to_csv(sr_minute_filename)
+        logger.info(f"SRs minutales filtrados guardados en: {sr_minute_filename}")
+        
+        # Agregación diaria (Q25) - solo columnas válidas
+        df_daily_sr_q25 = sr_filtered_df[valid_soiled_cols].resample('D').quantile(0.25).dropna(how='all')
+        daily_sr_q25_filename = os.path.join(paths.REFCELLS_SOLAR_NOON_OUTPUT_SUBDIR_CSV, 'sr_daily_q25.csv')
+        if not df_daily_sr_q25.empty:
+            df_daily_sr_q25.to_csv(daily_sr_q25_filename)
+            logger.info(f"SRs diarios Q25 guardados en: {daily_sr_q25_filename}")
+        
+        # Agregación semanal (Q25) - solo columnas válidas
+        df_weekly_sr_q25 = sr_filtered_df[valid_soiled_cols].resample('W-SUN').quantile(0.25).dropna(how='all')
+        weekly_sr_q25_filename = os.path.join(paths.REFCELLS_SOLAR_NOON_OUTPUT_SUBDIR_CSV, 'sr_weekly_q25.csv')
+        if not df_weekly_sr_q25.empty:
+            df_weekly_sr_q25.to_csv(weekly_sr_q25_filename)
+            logger.info(f"SRs semanales Q25 guardados en: {weekly_sr_q25_filename}")
+        
+        # --- 7. Generación de Gráficos (usando rutas de mediodía solar) ---
+        logger.info("Generando gráficos para Celdas de Referencia (Mediodía Solar)...")
+        plt.style.use('seaborn-v0_8-whitegrid')
+        
+        # Guardar rutas originales temporalmente
+        original_csv_dir = paths.REFCELLS_OUTPUT_SUBDIR_CSV
+        original_graph_dir = paths.REFCELLS_OUTPUT_SUBDIR_GRAPH
+        
+        # Usar rutas de mediodía solar temporalmente
+        paths.REFCELLS_OUTPUT_SUBDIR_CSV = paths.REFCELLS_SOLAR_NOON_OUTPUT_SUBDIR_CSV
+        paths.REFCELLS_OUTPUT_SUBDIR_GRAPH = paths.REFCELLS_SOLAR_NOON_OUTPUT_SUBDIR_GRAPH
+        
+        try:
+            # --- 7.1 Gráfico de Irradiancias ---
+            irr_cols_to_plot = settings.REFCELLS_IRRADIANCE_COLUMNS_TO_PLOT
+            actual_irr_cols_to_plot = [col for col in irr_cols_to_plot if col in df_ref_cells.columns]
+            
+            if actual_irr_cols_to_plot:
+                fig_irr, ax_irr = plt.subplots(figsize=(12, 6))
+                plotted_irradiance = False
+                for col_irr in actual_irr_cols_to_plot:
+                    serie_irr_daily = df_ref_cells[col_irr].resample('D').mean().dropna()
+                    if not serie_irr_daily.empty:
+                        serie_irr_daily.plot(ax=ax_irr, style='-', alpha=0.8, label=f'{col_irr} (Media Diaria)')
+                        plotted_irradiance = True
+                
+                if plotted_irradiance:
+                    ax_irr.legend(loc='best')
+                    ax_irr.set_ylabel('Irradiance [W/m²]')
+                    ax_irr.set_xlabel('Day')
+                    ax_irr.set_title('Daily Irradiance - Selected Reference Cells (Solar Noon)')
+                    ax_irr.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+                    plt.xticks(rotation=45, ha='right')
+                    plt.tight_layout()
+                    if settings.SAVE_FIGURES:
+                        save_plot_matplotlib(fig_irr, 'refcells_irradiancia_seleccionada_diaria.png', paths.REFCELLS_OUTPUT_SUBDIR_GRAPH)
+                    if settings.SHOW_FIGURES: plt.show()
+                    elif settings.SAVE_FIGURES: plt.close(fig_irr)
+                    if not settings.SHOW_FIGURES and not settings.SAVE_FIGURES: plt.close(fig_irr)
+            
+            # --- 7.2 Gráficos SR Semanal y Diario Combinados ---
+            # Nota: df_daily_sr_q25 y df_weekly_sr_q25 ya fueron calculados arriba
+            if not sr_filtered_df.empty and not df_weekly_sr_q25.empty:
+                # Gráfico SR Semanal Combinado
+                if not df_weekly_sr_q25.empty:
+                    fig_w, ax_w = plt.subplots(figsize=(12, 6))
+                    plotted_weekly_sr = False
+                    for col in valid_soiled_cols:
+                        if col in df_weekly_sr_q25.columns and not df_weekly_sr_q25[col].dropna().empty:
+                            serie_w = df_weekly_sr_q25[col].copy()
+                            if settings.REFCELLS_ADJUST_TO_100_FLAG:
+                                serie_w_adj = _adjust_series_start_to_100(serie_w, f"{col} Semanal Q25")
+                            else:
+                                serie_w_adj = serie_w
+                            if not serie_w_adj.dropna().empty:
+                                serie_w_adj.plot(ax=ax_w, style='o-', alpha=0.85, label=f'SR Photocells', linewidth=1)
+                                plotted_weekly_sr = True
+                    
+                    if plotted_weekly_sr:
+                        ax_w.legend(loc='best')
+                        ax_w.set_ylabel(f'Soiling Ratio{" Adjusted" if settings.REFCELLS_ADJUST_TO_100_FLAG else ""} [%]')
+                        ax_w.set_xlabel('Week')
+                        ax_w.set_title(f'Soiling Ratio{" Adjusted" if settings.REFCELLS_ADJUST_TO_100_FLAG else ""} - Reference Cells (Weekly Q25, Solar Noon)')
+                        ax_w.set_ylim([50, 110])
+                        ax_w.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+                        plt.xticks(rotation=45, ha='right')
+                        plt.tight_layout()
+                        if settings.SAVE_FIGURES:
+                            save_plot_matplotlib(fig_w, 'refcells_sr_combinado_semanal.png', paths.REFCELLS_OUTPUT_SUBDIR_GRAPH)
+                        if settings.SHOW_FIGURES: plt.show()
+                        elif settings.SAVE_FIGURES: plt.close(fig_w)
+                        if not settings.SHOW_FIGURES and not settings.SAVE_FIGURES: plt.close(fig_w)
+                
+                # Gráfico SR Diario Combinado
+                # Cargar datos de incertidumbre diaria para mediodía solar
+                uncertainty_data_daily_solar_noon = None
+                try:
+                    # Para mediodía solar, los datos están en el subdirectorio mediodia_solar
+                    uncertainty_file_solar_noon = os.path.join(paths.PROPAGACION_ERRORES_SOLAR_NOON_DIR, "sr_daily_abs_with_U.csv")
+                    if os.path.exists(uncertainty_file_solar_noon):
+                        df_uncertainty = pd.read_csv(uncertainty_file_solar_noon, index_col='timestamp', parse_dates=True)
+                        if df_uncertainty.index.tz is None:
+                            df_uncertainty.index = df_uncertainty.index.tz_localize('UTC')
+                        uncertainty_data_daily_solar_noon = df_uncertainty
+                except Exception as e:
+                    logger.warning(f"No se pudieron cargar datos de incertidumbre diaria para gráfico combinado (mediodía solar): {e}")
+                
+                if not df_daily_sr_q25.empty:
+                    fig_d, ax_d = plt.subplots(figsize=(12, 6))
+                    plotted_daily_sr = False
+                    for col in valid_soiled_cols:
+                        if col in df_daily_sr_q25.columns and not df_daily_sr_q25[col].dropna().empty:
+                            serie_d = df_daily_sr_q25[col].copy()
+                            if settings.REFCELLS_ADJUST_TO_100_FLAG:
+                                serie_d_adj = _adjust_series_start_to_100(serie_d, f"{col} Diario Q25")
+                            else:
+                                serie_d_adj = serie_d
+                            if not serie_d_adj.dropna().empty:
+                                # Intentar agregar barras de error si hay datos de incertidumbre
+                                if uncertainty_data_daily_solar_noon is not None and 'U_rel_k2' in uncertainty_data_daily_solar_noon.columns:
+                                    uncertainty_index = uncertainty_data_daily_solar_noon.index
+                                    yerr = []
+                                    for date in serie_d_adj.index:
+                                        sr_val = serie_d_adj.loc[date]
+                                        if pd.notna(sr_val):
+                                            if date in uncertainty_index:
+                                                u_rel = uncertainty_data_daily_solar_noon.loc[date, 'U_rel_k2']
+                                            else:
+                                                time_diffs = abs(uncertainty_index - date)
+                                                closest_idx = time_diffs.argmin()
+                                                if time_diffs[closest_idx] <= pd.Timedelta(days=1):
+                                                    u_rel = uncertainty_data_daily_solar_noon.iloc[closest_idx]['U_rel_k2']
+                                                else:
+                                                    u_rel = np.nan
+                                            
+                                            if pd.notna(u_rel):
+                                                yerr.append(u_rel * sr_val / 100.0)
+                                            else:
+                                                yerr.append(0)
+                                        else:
+                                            yerr.append(0)
+                                    
+                                    ax_d.errorbar(serie_d_adj.index, serie_d_adj.values, yerr=yerr, fmt='o-', 
+                                                 alpha=0.85, label=f'SR Photocells', linewidth=1, capsize=3, 
+                                                 capthick=1.5, elinewidth=1.5, ecolor='lightblue')
+                                else:
+                                    serie_d_adj.plot(ax=ax_d, style='o-', alpha=0.85, label=f'SR Photocells', linewidth=1)
+                                plotted_daily_sr = True
+                    
+                    if plotted_daily_sr:
+                        ax_d.legend(loc='best')
+                        ax_d.set_ylabel(f'Soiling Ratio{" Adjusted" if settings.REFCELLS_ADJUST_TO_100_FLAG else ""} [%]')
+                        ax_d.set_xlabel('Day')
+                        ax_d.set_title(f'Soiling Ratio{" Adjusted" if settings.REFCELLS_ADJUST_TO_100_FLAG else ""} - Reference Cells (Daily Q25, Solar Noon)')
+                        ax_d.set_ylim([50, 110])
+                        ax_d.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+                        plt.xticks(rotation=45, ha='right')
+                        plt.tight_layout()
+                        if settings.SAVE_FIGURES:
+                            save_plot_matplotlib(fig_d, 'refcells_sr_combinado_diario.png', paths.REFCELLS_OUTPUT_SUBDIR_GRAPH)
+                        if settings.SHOW_FIGURES: plt.show()
+                        elif settings.SAVE_FIGURES: plt.close(fig_d)
+                        if not settings.SHOW_FIGURES and not settings.SAVE_FIGURES: plt.close(fig_d)
+                
+                # Generar gráficos individuales usando las funciones existentes
+                # Estas funciones usarán las rutas temporales que configuramos
+                for col in valid_soiled_cols:
+                    if col in df_weekly_sr_q25.columns and not df_weekly_sr_q25[col].dropna().empty:
+                        _generate_specific_cell_plot(
+                            df_weekly_sr_q25,
+                            col,
+                            settings.ANALYSIS_START_DATE_GENERAL_STR,
+                            settings.ANALYSIS_END_DATE_GENERAL_STR,
+                            sr_min_val,
+                            sr_max_val
+                        )
+                        _generate_first_3_months_plot(
+                            df_weekly_sr_q25,
+                            col,
+                            sr_min_val,
+                            sr_max_val
+                        )
+                        _generate_first_3_months_weekly_plot(
+                            df_weekly_sr_q25,
+                            col,
+                            sr_min_val,
+                            sr_max_val
+                        )
+                    
+                    if col in df_daily_sr_q25.columns and not df_daily_sr_q25[col].dropna().empty:
+                        # Usar archivo de incertidumbre de mediodía solar
+                        uncertainty_file_solar_noon = os.path.join(paths.PROPAGACION_ERRORES_SOLAR_NOON_DIR, "sr_daily_abs_with_U.csv")
+                        _generate_daily_q25_trend_plot(
+                            df_daily_sr_q25,
+                            col,
+                            sr_min_val,
+                            sr_max_val,
+                            uncertainty_file=uncertainty_file_solar_noon
+                        )
+        finally:
+            # Restaurar rutas originales
+            paths.REFCELLS_OUTPUT_SUBDIR_CSV = original_csv_dir
+            paths.REFCELLS_OUTPUT_SUBDIR_GRAPH = original_graph_dir
+        
+        logger.info("✅ Análisis de celdas de referencia (mediodía solar) completado exitosamente.")
+        print(f"\nLos resultados de mediodía solar se guardaron en:")
+        print(f"  - CSVs: {paths.REFCELLS_SOLAR_NOON_OUTPUT_SUBDIR_CSV}")
+        print(f"  - Gráficos: {paths.REFCELLS_SOLAR_NOON_OUTPUT_SUBDIR_GRAPH}\n")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error inesperado en análisis de mediodía solar: {e}", exc_info=True)
+        return False
+
+
 def _generate_specific_cell_plot(df_weekly_sr_q25: pd.DataFrame, cell_name: str, start_date: str, end_date: str, sr_min_val: float, sr_max_val: float) -> None:
     """
     Genera un gráfico específico de SR semanal para una celda particular con fechas personalizadas.
-    Incluye línea de tendencia lineal, pendiente y R².
+    Incluye línea de tendencia lineal, pendiente y R², y barras de error de incertidumbre.
     """
     if cell_name not in df_weekly_sr_q25.columns:
         logger.warning(f"La celda {cell_name} no se encuentra en los datos semanales.")
@@ -463,6 +1010,21 @@ def _generate_specific_cell_plot(df_weekly_sr_q25: pd.DataFrame, cell_name: str,
         logger.warning(f"No hay datos para {cell_name} en el rango de fechas especificado.")
         return
 
+    # Cargar datos de incertidumbre semanal
+    uncertainty_data = None
+    try:
+        uncertainty_file = paths.SR_WEEKLY_ABS_WITH_U_FILE
+        if os.path.exists(uncertainty_file):
+            df_uncertainty = pd.read_csv(uncertainty_file, index_col='timestamp', parse_dates=True)
+            if df_uncertainty.index.tz is None:
+                df_uncertainty.index = df_uncertainty.index.tz_localize('UTC')
+            # Filtrar por el mismo rango de fechas
+            uncertainty_data = df_uncertainty.loc[start:end]
+        else:
+            logger.warning(f"Archivo de incertidumbre no encontrado: {uncertainty_file}")
+    except Exception as e:
+        logger.warning(f"No se pudieron cargar datos de incertidumbre: {e}")
+
     # Crear el gráfico
     fig, ax = plt.subplots(figsize=(12, 6))
     serie = df_filtered[cell_name].copy()
@@ -470,27 +1032,77 @@ def _generate_specific_cell_plot(df_weekly_sr_q25: pd.DataFrame, cell_name: str,
     if settings.REFCELLS_ADJUST_TO_100_FLAG:
         serie = _adjust_series_start_to_100(serie, f"{cell_name} Semanal Q25")
 
-    # Plotear datos originales
-    serie.plot(ax=ax, style='o-', alpha=0.85, label=f'SR Photocells', linewidth=1)
+    # Plotear datos originales con barras de error si están disponibles
+    if uncertainty_data is not None and 'U_rel_k2' in uncertainty_data.columns and len(uncertainty_data) > 0:
+        # Calcular barras de error: U_rel_k2 está en porcentaje, convertirlo a valor absoluto
+        # U_rel_k2 es la incertidumbre relativa k=2, así que la barra de error es U_rel_k2 * SR / 100
+        uncertainty_index = uncertainty_data.index
+        yerr = []
+        for date in serie.index:
+            sr_val = serie.loc[date]
+            if pd.notna(sr_val):
+                # Buscar fecha más cercana en el archivo de incertidumbre
+                if date in uncertainty_index:
+                    u_rel = uncertainty_data.loc[date, 'U_rel_k2']
+                else:
+                    # Encontrar la fecha más cercana (dentro de 3 días)
+                    time_diffs = abs(uncertainty_index - date)
+                    closest_idx = time_diffs.argmin()
+                    if time_diffs[closest_idx] <= pd.Timedelta(days=3):
+                        u_rel = uncertainty_data.iloc[closest_idx]['U_rel_k2']
+                    else:
+                        u_rel = np.nan
+                
+                if pd.notna(u_rel):
+                    # Incertidumbre absoluta = incertidumbre relativa * valor
+                    yerr.append(u_rel * sr_val / 100.0)
+                else:
+                    yerr.append(0)
+            else:
+                yerr.append(0)
+        
+        # Graficar con barras de error
+        ax.errorbar(serie.index, serie.values, yerr=yerr, fmt='o-', alpha=0.85, 
+                   label=f'SR Photocells', linewidth=1, capsize=3, capthick=1.5,
+                   elinewidth=1.5, color='blue', ecolor='lightblue')
+    else:
+        # Graficar sin barras de error
+        serie.plot(ax=ax, style='o-', alpha=0.85, label=f'SR Photocells', linewidth=1)
 
-    # Calcular línea de tendencia
-    x = np.arange(len(serie))
+    # Calcular línea de tendencia usando fechas reales
+    # Convertir fechas a días desde el primer punto para que la pendiente tenga sentido
     y = serie.values
     mask = ~np.isnan(y)
     if np.sum(mask) > 1:  # Necesitamos al menos 2 puntos para una línea
-        slope, intercept, r_value, p_value, std_err = stats.linregress(x[mask], y[mask])
+        # Obtener fechas válidas
+        valid_dates = serie.index[mask]
+        # Convertir a días desde la primera fecha válida
+        first_date = valid_dates[0]
+        x_days = (valid_dates - first_date).total_seconds() / 86400.0  # Convertir a días
+        y_valid = y[mask]
+        
+        # Calcular regresión usando días
+        slope_days, intercept, r_value, p_value, std_err = stats.linregress(x_days, y_valid)
         r2 = r_value ** 2
-        y_trend = slope * x + intercept
+        
+        # Convertir pendiente a %/semana (multiplicar por 7 días)
+        slope_weeks = slope_days * 7
+        
+        # Calcular valores de tendencia para todas las fechas
+        all_dates = serie.index
+        x_all_days = (all_dates - first_date).total_seconds() / 86400.0
+        y_trend = slope_days * x_all_days + intercept
+        
         # Graficar la tendencia sobre las mismas fechas con el mismo color que la curva
         ax.plot(serie.index, y_trend, '--', linewidth=2, alpha=0.7,
-                label=f'Trend: {slope:.3f}%/Week, R²: {r2:.3f})', color=ax.lines[-1].get_color())
+                label=f'Trend: {slope_weeks:.3f}%/Week, R²: {r2:.3f}', color=ax.lines[-1].get_color())
 
     ax.set_ylabel(f'Soiling Ratio [%]')
     ax.set_xlabel('Week')
     ax.set_title(f'SR Photocells')
     ax.grid(True, which='both', linestyle='--')
     ax.legend(loc='best')
-    ax.set_ylim([90, 110])
+    ax.set_ylim([50, 110])
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
 
     if settings.SAVE_FIGURES:
@@ -559,7 +1171,7 @@ def _generate_first_3_months_plot(df_weekly_sr_q25: pd.DataFrame, cell_name: str
     ax.set_xlabel('Month')
     ax.set_title('SR Photocells (First 3 Months)')
     ax.grid(True, which='both', linestyle='--')
-    ax.set_ylim([90, 110])
+    ax.set_ylim([50, 110])
     ax.set_xticks(x)
     ax.set_xticklabels(labels)
     ax.legend(loc='best')
@@ -612,10 +1224,65 @@ def _generate_first_3_months_weekly_plot(df_weekly_sr_q25: pd.DataFrame, cell_na
             y_values.append(value)
 
     if x_positions:
+        # Cargar datos de incertidumbre semanal para agregar barras de error
+        uncertainty_data = None
+        try:
+            uncertainty_file = paths.SR_WEEKLY_ABS_WITH_U_FILE
+            if os.path.exists(uncertainty_file):
+                df_uncertainty = pd.read_csv(uncertainty_file, index_col='timestamp', parse_dates=True)
+                if df_uncertainty.index.tz is None:
+                    df_uncertainty.index = df_uncertainty.index.tz_localize('UTC')
+                # Filtrar por el mismo rango de fechas
+                uncertainty_data = df_uncertainty.loc[first_date:third_month]
+        except Exception as e:
+            logger.warning(f"No se pudieron cargar datos de incertidumbre: {e}")
+        
         fig, ax = plt.subplots(figsize=(8, 5))
         
-        # Plotear datos semanales
-        ax.plot(x_positions, y_values, 'o-', alpha=0.85, label='SR Photocells', linewidth=1)
+        # Preparar barras de error si están disponibles
+        yerr_values = []
+        has_uncertainty = False
+        if uncertainty_data is not None and 'U_rel_k2' in uncertainty_data.columns and len(uncertainty_data) > 0:
+            # Mapear fechas a posiciones X y calcular barras de error
+            # Usar la fecha más cercana si no hay coincidencia exacta
+            uncertainty_index = uncertainty_data.index
+            for date, value in serie.items():
+                if pd.notna(value):
+                    # Buscar fecha más cercana en el archivo de incertidumbre
+                    if date in uncertainty_index:
+                        u_rel = uncertainty_data.loc[date, 'U_rel_k2']
+                    else:
+                        # Encontrar la fecha más cercana (dentro de 3 días)
+                        time_diffs = abs(uncertainty_index - date)
+                        closest_idx = time_diffs.argmin()
+                        if time_diffs[closest_idx] <= pd.Timedelta(days=3):
+                            u_rel = uncertainty_data.iloc[closest_idx]['U_rel_k2']
+                        else:
+                            u_rel = np.nan
+                    
+                    if pd.notna(u_rel):
+                        # Incertidumbre absoluta = incertidumbre relativa * valor
+                        yerr_values.append(u_rel * value / 100.0)
+                        has_uncertainty = True
+                    else:
+                        yerr_values.append(0)
+                else:
+                    yerr_values.append(0)
+            
+            if has_uncertainty:
+                logger.info(f"Agregando barras de error a gráfico de primeros 3 meses semanal ({len([v for v in yerr_values if v > 0])} puntos con incertidumbre)")
+                # Plotear datos semanales con barras de error
+                ax.errorbar(x_positions, y_values, yerr=yerr_values, fmt='o-', alpha=0.85, 
+                           label='SR Photocells', linewidth=1, capsize=3, capthick=1.5,
+                           elinewidth=1.5, color='blue', ecolor='lightblue')
+            else:
+                logger.warning("No se encontraron datos de incertidumbre para las fechas del gráfico")
+                # Plotear datos semanales sin barras de error
+                ax.plot(x_positions, y_values, 'o-', alpha=0.85, label='SR Photocells', linewidth=1)
+        else:
+            logger.warning(f"No se pudieron cargar datos de incertidumbre para el gráfico de primeros 3 meses")
+            # Plotear datos semanales sin barras de error
+            ax.plot(x_positions, y_values, 'o-', alpha=0.85, label='SR Photocells', linewidth=1)
 
         # Calcular línea de tendencia
         if len(x_positions) > 1:
@@ -633,7 +1300,7 @@ def _generate_first_3_months_weekly_plot(df_weekly_sr_q25: pd.DataFrame, cell_na
         ax.set_xlabel('Week')
         ax.set_title('SR Photocells (First 3 Months - Weekly)')
         ax.grid(True, which='both', linestyle='--')
-        ax.set_ylim([90, 110])
+        ax.set_ylim([50, 110])
         
         # Configurar eje X con números de semana
         # Calcular las semanas que tenemos datos
@@ -676,9 +1343,17 @@ def _generate_first_3_months_weekly_plot(df_weekly_sr_q25: pd.DataFrame, cell_na
     else:
         logger.info(f"No hay datos válidos para graficar la celda {cell_name}.")
 
-def _generate_daily_q25_trend_plot(df_daily_sr_q25: pd.DataFrame, cell_name: str, sr_min_val: float, sr_max_val: float) -> None:
+def _generate_daily_q25_trend_plot(df_daily_sr_q25: pd.DataFrame, cell_name: str, sr_min_val: float, sr_max_val: float, uncertainty_file: Optional[str] = None) -> None:
     """
     Genera un gráfico específico de SR diario Q25 para la celda 411 con línea de tendencia.
+    Incluye barras de error de incertidumbre.
+    
+    Args:
+        df_daily_sr_q25: DataFrame con datos diarios Q25
+        cell_name: Nombre de la celda a graficar
+        sr_min_val: Valor mínimo de SR para filtrado
+        sr_max_val: Valor máximo de SR para filtrado
+        uncertainty_file: Ruta opcional al archivo de incertidumbre. Si no se proporciona, usa el archivo por defecto.
     """
     if cell_name not in df_daily_sr_q25.columns:
         logger.warning(f"La celda {cell_name} no se encuentra en los datos diarios.")
@@ -688,6 +1363,24 @@ def _generate_daily_q25_trend_plot(df_daily_sr_q25: pd.DataFrame, cell_name: str
         logger.warning(f"No hay datos para {cell_name} en los datos diarios Q25.")
         return
 
+    # Cargar datos de incertidumbre diaria
+    uncertainty_data = None
+    try:
+        if uncertainty_file is None:
+            uncertainty_file = paths.SR_DAILY_ABS_WITH_U_FILE
+        if os.path.exists(uncertainty_file):
+            df_uncertainty = pd.read_csv(uncertainty_file, index_col='timestamp', parse_dates=True)
+            if df_uncertainty.index.tz is None:
+                df_uncertainty.index = df_uncertainty.index.tz_localize('UTC')
+            # Filtrar por el mismo rango de fechas que los datos diarios
+            start_date = df_daily_sr_q25.index.min()
+            end_date = df_daily_sr_q25.index.max()
+            uncertainty_data = df_uncertainty.loc[start_date:end_date]
+        else:
+            logger.warning(f"Archivo de incertidumbre diaria no encontrado: {uncertainty_file}")
+    except Exception as e:
+        logger.warning(f"No se pudieron cargar datos de incertidumbre diaria: {e}")
+
     # Crear el gráfico
     fig, ax = plt.subplots(figsize=(12, 6))
     serie = df_daily_sr_q25[cell_name].copy()
@@ -695,27 +1388,73 @@ def _generate_daily_q25_trend_plot(df_daily_sr_q25: pd.DataFrame, cell_name: str
     if settings.REFCELLS_ADJUST_TO_100_FLAG:
         serie = _adjust_series_start_to_100(serie, f"{cell_name} Diario Q25")
 
-    # Plotear datos originales
-    serie.plot(ax=ax, style='o-', alpha=0.85, label=f'SR Photocells (Diario Q25)', linewidth=1)
+    # Plotear datos originales con barras de error si están disponibles
+    if uncertainty_data is not None and 'U_rel_k2' in uncertainty_data.columns and len(uncertainty_data) > 0:
+        # Calcular barras de error: U_rel_k2 está en porcentaje, convertirlo a valor absoluto
+        uncertainty_index = uncertainty_data.index
+        yerr = []
+        for date in serie.index:
+            sr_val = serie.loc[date]
+            if pd.notna(sr_val):
+                # Buscar fecha exacta o más cercana en el archivo de incertidumbre
+                if date in uncertainty_index:
+                    u_rel = uncertainty_data.loc[date, 'U_rel_k2']
+                else:
+                    # Encontrar la fecha más cercana (dentro de 1 día para datos diarios)
+                    time_diffs = abs(uncertainty_index - date)
+                    closest_idx = time_diffs.argmin()
+                    if time_diffs[closest_idx] <= pd.Timedelta(days=1):
+                        u_rel = uncertainty_data.iloc[closest_idx]['U_rel_k2']
+                    else:
+                        u_rel = np.nan
+                
+                if pd.notna(u_rel):
+                    # Incertidumbre absoluta = incertidumbre relativa * valor
+                    yerr.append(u_rel * sr_val / 100.0)
+                else:
+                    yerr.append(0)
+            else:
+                yerr.append(0)
+        
+        # Graficar con barras de error
+        ax.errorbar(serie.index, serie.values, yerr=yerr, fmt='o-', alpha=0.85, 
+                   label=f'SR Photocells (Diario Q25)', linewidth=1, capsize=3, capthick=1.5,
+                   elinewidth=1.5, color='blue', ecolor='lightblue')
+    else:
+        # Graficar sin barras de error
+        serie.plot(ax=ax, style='o-', alpha=0.85, label=f'SR Photocells (Diario Q25)', linewidth=1)
 
-    # Calcular línea de tendencia
-    x = np.arange(len(serie))
+    # Calcular línea de tendencia usando fechas reales
+    # Convertir fechas a días desde el primer punto para que la pendiente tenga sentido
     y = serie.values
     mask = ~np.isnan(y)
     if np.sum(mask) > 1:  # Necesitamos al menos 2 puntos para una línea
-        slope, intercept, r_value, p_value, std_err = stats.linregress(x[mask], y[mask])
+        # Obtener fechas válidas
+        valid_dates = serie.index[mask]
+        # Convertir a días desde la primera fecha válida
+        first_date = valid_dates[0]
+        x_days = (valid_dates - first_date).total_seconds() / 86400.0  # Convertir a días
+        y_valid = y[mask]
+        
+        # Calcular regresión usando días
+        slope_days, intercept, r_value, p_value, std_err = stats.linregress(x_days, y_valid)
         r2 = r_value ** 2
-        y_trend = slope * x + intercept
+        
+        # Calcular valores de tendencia para todas las fechas
+        all_dates = serie.index
+        x_all_days = (all_dates - first_date).total_seconds() / 86400.0
+        y_trend = slope_days * x_all_days + intercept
+        
         # Graficar la tendencia sobre las mismas fechas con el mismo color que la curva
         ax.plot(serie.index, y_trend, '--', linewidth=2, alpha=0.7,
-                label=f'Trend: {slope:.3f}%/day, R²: {r2:.3f}', color=ax.lines[-1].get_color())
+                label=f'Trend: {slope_days:.3f}%/day, R²: {r2:.3f}', color=ax.lines[-1].get_color())
 
     ax.set_ylabel(f'Soiling Ratio{" Adjusted" if settings.REFCELLS_ADJUST_TO_100_FLAG else ""} [%]')
     ax.set_xlabel('Day')
     ax.set_title(f'Daily SR Q25 with Trend - {cell_name}')
     ax.grid(True, which='both', linestyle='--')
     ax.legend(loc='best')
-    ax.set_ylim([90, 110])
+    ax.set_ylim([50, 110])
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
     plt.xticks(rotation=45, ha='right')
     plt.tight_layout()
@@ -1002,11 +1741,24 @@ def run_analysis():
     Función estándar para ejecutar el análisis de Celdas de Referencia.
     Usa la configuración centralizada para rutas y parámetros.
     """
-    raw_data_filepath = os.path.join(paths.BASE_INPUT_DIR, paths.REFCELLS_RAW_DATA_FILENAME)
+    raw_data_filepath = paths.REFCELLS_RAW_DATA_FILE
     return analyze_ref_cells_data(raw_data_filepath)
+
+def run_analysis_solar_noon(hours_window: float = 2.5):
+    """
+    Función de entrada principal para ejecutar el análisis de celdas de referencia filtrado por mediodía solar.
+    
+    Args:
+        hours_window: Ventana en horas alrededor del medio día solar (default: 2.5 horas)
+    
+    Returns:
+        bool: True si el análisis fue exitoso, False en caso contrario
+    """
+    raw_data_filepath = paths.REFCELLS_RAW_DATA_FILE
+    return analyze_ref_cells_data_solar_noon(raw_data_filepath, hours_window)
 
 if __name__ == "__main__":
     # Solo se ejecuta cuando el archivo se ejecuta directamente
     print("[INFO] Ejecutando análisis de celdas de referencia desde main...")
-    raw_data_path = os.path.join(paths.BASE_INPUT_DIR, paths.REFCELLS_RAW_DATA_FILENAME)
+    raw_data_path = paths.REFCELLS_RAW_DATA_FILE
     analyze_ref_cells_data(raw_data_path) 

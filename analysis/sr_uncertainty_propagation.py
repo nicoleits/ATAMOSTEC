@@ -49,7 +49,7 @@ SOILED_COL = "1RC411(w.m-2)"  # Celda sucia
 CLEAN_COL = "1RC412(w.m-2)"   # Celda limpia
 
 # Umbral mínimo de irradiancia (noche)
-MIN_IRRADIANCE_THRESHOLD = 10.0  # W/m²
+MIN_IRRADIANCE_THRESHOLD = 200.0  # W/m²
 
 # Timezone para agregaciones
 TZ_ANALYSIS = "America/Santiago"
@@ -218,8 +218,8 @@ def process_campaign_uncertainty(
             C_aligned.notna() &
             (S_aligned >= 0) &  # No valores negativos
             (C_aligned >= 0) &  # No valores negativos
-            (S_aligned < 2000) &  # Umbral de saturación razonable
-            (C_aligned < 2000)   # Umbral de saturación razonable
+            (S_aligned < 1500) &  # Umbral de saturación razonable
+            (C_aligned < 1500)   # Umbral de saturación razonable
         )
         n_discarded = (~mask_valid).sum()
         pct_discarded = (n_discarded / len(S_aligned)) * 100 if len(S_aligned) > 0 else 0
@@ -229,14 +229,14 @@ def process_campaign_uncertainty(
         n_c_low = ((C_aligned > 0) & (C_aligned <= MIN_IRRADIANCE_THRESHOLD)).sum()
         n_nan = (S_aligned.isna() | C_aligned.isna()).sum()
         n_negative = ((S_aligned < 0) | (C_aligned < 0)).sum()
-        n_saturated = ((S_aligned >= 2000) | (C_aligned >= 2000)).sum()
+        n_saturated = ((S_aligned >= 1500) | (C_aligned >= 1500)).sum()
         
         logger.info(f"Minutos descartados: {n_discarded} ({pct_discarded:.2f}%)")
         logger.info(f"  - C <= 0: {n_c_zero}")
         logger.info(f"  - C < {MIN_IRRADIANCE_THRESHOLD} W/m² (noche): {n_c_low}")
         logger.info(f"  - NaN: {n_nan}")
         logger.info(f"  - Valores negativos: {n_negative}")
-        logger.info(f"  - Valores saturados (>= 2000 W/m²): {n_saturated}")
+        logger.info(f"  - Valores saturados (>= 1500 W/m²): {n_saturated}")
         logger.info(f"Minutos válidos: {mask_valid.sum()}")
         
         # Calcular propagación de incertidumbre
@@ -653,7 +653,8 @@ def validate_and_log_results(df_sr_uncertainty: pd.DataFrame) -> dict:
 def run_uncertainty_propagation_analysis(
     df_ref_cells: pd.DataFrame,
     soiled_col: str = SOILED_COL,
-    clean_col: str = CLEAN_COL
+    clean_col: str = CLEAN_COL,
+    output_dir: Optional[str] = None
 ) -> bool:
     """
     Función principal para ejecutar el análisis completo de propagación de incertidumbre.
@@ -662,6 +663,7 @@ def run_uncertainty_propagation_analysis(
         df_ref_cells: DataFrame con datos de celdas de referencia
         soiled_col: Nombre de columna de celda sucia
         clean_col: Nombre de columna de celda limpia
+        output_dir: Directorio opcional para guardar resultados (si None, usa rutas por defecto)
     
     Returns:
         bool: True si el análisis fue exitoso, False en caso contrario
@@ -671,8 +673,22 @@ def run_uncertainty_propagation_analysis(
         logger.info("INICIANDO ANÁLISIS DE PROPAGACIÓN DE INCERTIDUMBRE DE SR")
         logger.info("="*80)
         
-        # Crear directorio de salida (ya está creado en paths.py, pero asegurar que existe)
-        os.makedirs(paths.PROPAGACION_ERRORES_REF_CELL_DIR, exist_ok=True)
+        # Determinar directorio de salida
+        if output_dir is None:
+            output_dir = paths.PROPAGACION_ERRORES_REF_CELL_DIR
+            output_minute_file = paths.SR_MINUTE_WITH_UNCERTAINTY_FILE
+            output_daily_file = paths.SR_DAILY_ABS_WITH_U_FILE
+            output_weekly_file = paths.SR_WEEKLY_ABS_WITH_U_FILE
+            output_monthly_file = paths.SR_MONTHLY_ABS_WITH_U_FILE
+        else:
+            # Usar directorio personalizado
+            output_minute_file = os.path.join(output_dir, 'sr_minute_with_uncertainty.csv')
+            output_daily_file = os.path.join(output_dir, 'sr_daily_abs_with_U.csv')
+            output_weekly_file = os.path.join(output_dir, 'sr_weekly_abs_with_U.csv')
+            output_monthly_file = os.path.join(output_dir, 'sr_monthly_abs_with_U.csv')
+        
+        # Crear directorio de salida
+        os.makedirs(output_dir, exist_ok=True)
         
         # --- Paso 1: Procesar incertidumbre minuto a minuto ---
         df_sr_uncertainty = process_campaign_uncertainty(
@@ -686,7 +702,6 @@ def run_uncertainty_propagation_analysis(
             return False
         
         # Guardar resultados minutales
-        output_minute_file = paths.SR_MINUTE_WITH_UNCERTAINTY_FILE
         df_sr_uncertainty.to_csv(output_minute_file)
         logger.info(f"✅ Resultados minutales guardados en: {output_minute_file}")
         
@@ -704,14 +719,14 @@ def run_uncertainty_propagation_analysis(
         logger.info("Calculando incertidumbre por período temporal (mensual)...")
         df_uncertainty_monthly = calculate_uncertainty_by_period(df_sr_uncertainty, freq='M')
         if not df_uncertainty_monthly.empty:
-            output_unc_monthly_file = os.path.join(paths.PROPAGACION_ERRORES_REF_CELL_DIR, 'sr_uncertainty_by_month.csv')
+            output_unc_monthly_file = os.path.join(output_dir, 'sr_uncertainty_by_month.csv')
             df_uncertainty_monthly.to_csv(output_unc_monthly_file)
             logger.info(f"✅ Incertidumbre mensual guardada en: {output_unc_monthly_file}")
         
         logger.info("Calculando incertidumbre por rangos de SR...")
         df_uncertainty_sr_range = calculate_uncertainty_by_sr_range(df_sr_uncertainty)
         if not df_uncertainty_sr_range.empty:
-            output_unc_sr_file = os.path.join(paths.PROPAGACION_ERRORES_REF_CELL_DIR, 'sr_uncertainty_by_sr_range.csv')
+            output_unc_sr_file = os.path.join(output_dir, 'sr_uncertainty_by_sr_range.csv')
             df_uncertainty_sr_range.to_csv(output_unc_sr_file)
             logger.info(f"✅ Incertidumbre por rangos de SR guardada en: {output_unc_sr_file}")
         
@@ -746,7 +761,6 @@ def run_uncertainty_propagation_analysis(
             df_sr_uncertainty=df_sr_uncertainty_utc
         )
         if not df_daily.empty:
-            output_daily_file = paths.SR_DAILY_ABS_WITH_U_FILE
             df_daily.to_csv(output_daily_file)
             logger.info(f"✅ Resultados diarios (con incertidumbre LOCAL) guardados en: {output_daily_file}")
         
@@ -756,7 +770,6 @@ def run_uncertainty_propagation_analysis(
             df_sr_uncertainty=df_sr_uncertainty_utc
         )
         if not df_weekly.empty:
-            output_weekly_file = paths.SR_WEEKLY_ABS_WITH_U_FILE
             df_weekly.to_csv(output_weekly_file)
             logger.info(f"✅ Resultados semanales (con incertidumbre LOCAL) guardados en: {output_weekly_file}")
         
@@ -766,7 +779,6 @@ def run_uncertainty_propagation_analysis(
             df_sr_uncertainty=df_sr_uncertainty_utc
         )
         if not df_monthly.empty:
-            output_monthly_file = paths.SR_MONTHLY_ABS_WITH_U_FILE
             df_monthly.to_csv(output_monthly_file)
             logger.info(f"✅ Resultados mensuales (con incertidumbre LOCAL) guardados en: {output_monthly_file}")
         
@@ -778,7 +790,10 @@ def run_uncertainty_propagation_analysis(
             rho_sensitivity = None
         
         # --- Paso 7: Generar reporte final ---
-        summary_file = paths.SR_UNCERTAINTY_SUMMARY_FILE
+        if output_dir is None:
+            summary_file = paths.SR_UNCERTAINTY_SUMMARY_FILE
+        else:
+            summary_file = os.path.join(output_dir, 'sr_uncertainty_summary.txt')
         generate_summary_report(
             summary_file,
             df_sr_uncertainty,

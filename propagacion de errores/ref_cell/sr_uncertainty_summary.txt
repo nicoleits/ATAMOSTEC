@@ -2,7 +2,7 @@
 REPORTE DE INCERTIDUMBRE DE SOILING RATIO (PROPAGACIÓN GUM)
 ================================================================================
 
-Fecha de análisis: 2025-11-28 12:48:41
+Fecha de análisis: 2025-12-02 15:52:22
 
 CONFIGURACIÓN:
 --------------------------------------------------------------------------------
@@ -44,9 +44,9 @@ FÓRMULAS DE PROPAGACIÓN:
 
 RESULTADOS DE CAMPAÑA (GLOBAL):
 --------------------------------------------------------------------------------
-Total de minutos válidos: 480,459
-Incertidumbre de campaña GLOBAL (k=1): u_campaign_k1_rel = 2.926%
-Incertidumbre de campaña GLOBAL (k=2): U_campaign_k2_rel = 5.853%
+Total de minutos válidos: 367,363
+Incertidumbre de campaña GLOBAL (k=1): u_campaign_k1_rel = 3.080%
+Incertidumbre de campaña GLOBAL (k=2): U_campaign_k2_rel = 6.160%
 
 ⚠️  NOTA IMPORTANTE:
    La incertidumbre global puede no ser representativa si el SR varía
@@ -55,16 +55,16 @@ Incertidumbre de campaña GLOBAL (k=2): U_campaign_k2_rel = 5.853%
 
 ESTADÍSTICAS DE SR:
 --------------------------------------------------------------------------------
-SR promedio: 95.12%
+SR promedio: 93.33%
 SR mínimo: 0.00%
 SR máximo: 200.00%
-SR desviación estándar: 24.51%
+SR desviación estándar: 27.37%
 
 ESTADÍSTICAS DE INCERTIDUMBRE:
 --------------------------------------------------------------------------------
-U_SR_k2_rel promedio: 5.853%
-U_SR_k2_rel desviación estándar: 6.503%
-U_SR_k2_rel - P25: 3.614%, P50: 3.685%, P75: 4.289%
+U_SR_k2_rel promedio: 6.160%
+U_SR_k2_rel desviación estándar: 7.018%
+U_SR_k2_rel - P25: 3.610%, P50: 3.685%, P75: 4.396%
 
 NOTAS:
 --------------------------------------------------------------------------------
@@ -91,32 +91,30 @@ Esta es más representativa que la incertidumbre global cuando el SR varía con 
   2025-03: U_k2_rel = 6.724% ± 7.791% (SR promedio: 95.78%, n=14,226.0 minutos)
   2025-04: U_k2_rel = 8.055% ± 8.417% (SR promedio: 96.75%, n=6,266.0 minutos)
   2025-05: U_k2_rel = 4.860% ± 4.085% (SR promedio: 96.27%, n=11,384.0 minutos)
-  2025-06: U_k2_rel = 4.933% ± 4.417% (SR promedio: 97.43%, n=18,388.0 minutos)
-  2025-07: U_k2_rel = 4.633% ± 3.572% (SR promedio: 97.63%, n=18,900.0 minutos)
-  2025-08: U_k2_rel = 4.807% ± 4.218% (SR promedio: 98.09%, n=14,657.0 minutos)
+  2025-06: U_k2_rel = 5.000% ± 4.500% (SR promedio: 97.84%, n=2,297.0 minutos)
 
 INCERTIDUMBRE POR RANGOS DE SR:
 --------------------------------------------------------------------------------
 Muestra cómo varía la incertidumbre con el nivel de soiling.
 
-  (-0.001, 80.0]: U_k2_rel = 19.813% ± 12.795% (n=2,410 minutos)
-  (80.0, 90.0]: U_k2_rel = 13.887% ± 11.764% (n=434 minutos)
-  (90.0, 95.0]: U_k2_rel = 9.659% ± 11.211% (n=10,597 minutos)
-  (95.0, 100.0]: U_k2_rel = 5.352% ± 5.916% (n=172,856 minutos)
-  (100.0, 105.0]: U_k2_rel = 5.519% ± 4.777% (n=30,842 minutos)
-  (105.0, 200.0]: U_k2_rel = 8.935% ± 4.887% (n=6,327 minutos)
+  (-0.001, 80.0]: U_k2_rel = 19.227% ± 12.574% (n=2,310 minutos)
+  (80.0, 90.0]: U_k2_rel = 13.483% ± 11.553% (n=374 minutos)
+  (90.0, 95.0]: U_k2_rel = 9.927% ± 12.157% (n=8,351 minutos)
+  (95.0, 100.0]: U_k2_rel = 5.691% ± 6.601% (n=126,425 minutos)
+  (100.0, 105.0]: U_k2_rel = 5.405% ± 4.562% (n=30,073 minutos)
+  (105.0, 200.0]: U_k2_rel = 8.950% ± 4.896% (n=6,285 minutos)
 
 ANÁLISIS DE SENSIBILIDAD (Correlación entre canales):
 --------------------------------------------------------------------------------
-  rho = 0.0: U_campaign_k2_rel = 933.319%
-  rho = 0.3: U_campaign_k2_rel = 814.401%
-  rho = 0.5: U_campaign_k2_rel = 720.188%
+  rho = 0.0: U_campaign_k2_rel = 921.322%
+  rho = 0.3: U_campaign_k2_rel = 813.793%
+  rho = 0.5: U_campaign_k2_rel = 728.592%
 
 ARCHIVOS GENERADOS:
 --------------------------------------------------------------------------------
-Minutal: /home/atamos/atamostec/ATAMOSTEC/ATAMOSTEC/outputs/sr_minute_with_uncertainty.csv
-Diario: /home/atamos/atamostec/ATAMOSTEC/ATAMOSTEC/outputs/sr_daily_abs_with_U.csv
-Semanal: /home/atamos/atamostec/ATAMOSTEC/ATAMOSTEC/outputs/sr_weekly_abs_with_U.csv
-Mensual: /home/atamos/atamostec/ATAMOSTEC/ATAMOSTEC/outputs/sr_monthly_abs_with_U.csv
-Este resumen: /home/atamos/atamostec/ATAMOSTEC/ATAMOSTEC/outputs/sr_uncertainty_summary.txt
+Minutal: /home/nicole/ATAMOSTEC/ATAMOSTEC2/ATAMOSTEC/propagacion de errores/ref_cell/sr_minute_with_uncertainty.csv
+Diario: /home/nicole/ATAMOSTEC/ATAMOSTEC2/ATAMOSTEC/propagacion de errores/ref_cell/sr_daily_abs_with_U.csv
+Semanal: /home/nicole/ATAMOSTEC/ATAMOSTEC2/ATAMOSTEC/propagacion de errores/ref_cell/sr_weekly_abs_with_U.csv
+Mensual: /home/nicole/ATAMOSTEC/ATAMOSTEC2/ATAMOSTEC/propagacion de errores/ref_cell/sr_monthly_abs_with_U.csv
+Este resumen: /home/nicole/ATAMOSTEC/ATAMOSTEC2/ATAMOSTEC/propagacion de errores/ref_cell/sr_uncertainty_summary.txt
 ================================================================================

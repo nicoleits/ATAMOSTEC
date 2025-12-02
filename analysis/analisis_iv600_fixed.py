@@ -958,6 +958,24 @@ def run_analysis():
 
     print("\n--- Visualización de Soiling Ratios IV600 FILTRADOS CON TENDENCIAS Finalizada ---")
 
+    # --- Propagación de Errores (GUM) ---
+    print("\n--- Iniciando análisis de propagación de incertidumbre de SR (IV600) ---")
+    try:
+        from analysis.sr_uncertainty_iv600 import run_uncertainty_propagation_analysis_iv600
+        # Usar el archivo raw_iv600_data.csv como entrada
+        uncertainty_success = run_uncertainty_propagation_analysis_iv600(
+            input_file=iv600_csv_path,
+            output_dir=None  # Usar el directorio por defecto de paths
+        )
+        if uncertainty_success:
+            print("✅ Análisis de propagación de incertidumbre completado exitosamente (IV600).")
+        else:
+            print("⚠️  El análisis de propagación de incertidumbre no se completó exitosamente.")
+    except ImportError as e:
+        print(f"❌ No se pudo importar el módulo 'sr_uncertainty_iv600': {e}")
+    except Exception as e:
+        print(f"❌ Error al ejecutar análisis de propagación de incertidumbre: {e}")
+
     return {
         'sr_pmp_iv600': sr_pmp_iv600,
         'sr_isc_iv600': sr_isc_iv600,

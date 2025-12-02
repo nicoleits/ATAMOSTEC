@@ -115,8 +115,54 @@ def analyze_dustiq_data(
         logger.warning(f"Advertencia: La columna '{sr_c11_col_name}' no se encontró.")
         sr_c11_filtered = pd.Series(dtype=float) 
 
+    # Análisis de Propagación de Incertidumbre de SR
+    logger.info("Iniciando análisis de propagación de incertidumbre de SR (DustIQ)...")
+    try:
+        from analysis.sr_uncertainty_dustiq import run_uncertainty_propagation_analysis
+        # Ejecutar análisis con SR_C11_Avg (columna principal)
+        uncertainty_success = run_uncertainty_propagation_analysis(
+            df,
+            sr_col=sr_c11_col_name,
+            use_average=False
+        )
+        if uncertainty_success:
+            logger.info("✅ Análisis de propagación de incertidumbre completado exitosamente (DustIQ).")
+        else:
+            logger.warning("⚠️  El análisis de propagación de incertidumbre no se completó exitosamente.")
+    except ImportError as e:
+        logger.error(f"No se pudo importar el módulo 'sr_uncertainty_dustiq': {e}")
+    except Exception as e:
+        logger.error(f"Error al ejecutar el análisis de propagación de incertidumbre: {e}", exc_info=True)
+    # Continuar con el resto del análisis aunque falle la incertidumbre
+
     dustiq_graph_subdir = "dustiq"
     os.makedirs(os.path.join(output_graph_dir, dustiq_graph_subdir), exist_ok=True)
+
+    # Cargar datos de incertidumbre semanal y diaria para barras de error
+    uncertainty_data_weekly = None
+    uncertainty_data_daily = None
+    try:
+        uncertainty_file_weekly = paths.DUSTIQ_SR_WEEKLY_ABS_WITH_U_FILE
+        if os.path.exists(uncertainty_file_weekly):
+            df_uncertainty = pd.read_csv(uncertainty_file_weekly, index_col='timestamp', parse_dates=True)
+            if df_uncertainty.index.tz is None:
+                df_uncertainty.index = df_uncertainty.index.tz_localize('UTC')
+            uncertainty_data_weekly = df_uncertainty
+            logger.info(f"Datos de incertidumbre semanal cargados: {len(uncertainty_data_weekly)} puntos")
+        else:
+            logger.warning(f"Archivo de incertidumbre semanal no encontrado: {uncertainty_file_weekly}")
+        
+        uncertainty_file_daily = paths.DUSTIQ_SR_DAILY_ABS_WITH_U_FILE
+        if os.path.exists(uncertainty_file_daily):
+            df_uncertainty_daily = pd.read_csv(uncertainty_file_daily, index_col='timestamp', parse_dates=True)
+            if df_uncertainty_daily.index.tz is None:
+                df_uncertainty_daily.index = df_uncertainty_daily.index.tz_localize('UTC')
+            uncertainty_data_daily = df_uncertainty_daily
+            logger.info(f"Datos de incertidumbre diaria cargados: {len(uncertainty_data_daily)} puntos")
+        else:
+            logger.warning(f"Archivo de incertidumbre diaria no encontrado: {uncertainty_file_daily}")
+    except Exception as e:
+        logger.warning(f"No se pudieron cargar datos de incertidumbre: {e}")
 
     # Gráfico 1: Medias semanales de SR_C11_Avg para franjas horarias FIJAS
     if not sr_c11_filtered.empty:
@@ -151,7 +197,47 @@ def analyze_dustiq_data(
                     ss_res = np.sum(residuos**2)
                     ss_tot = np.sum((y - np.mean(y))**2)
                     r2 = 1 - (ss_res / ss_tot)
-                    puntos, = ax1.plot(x, y, 'o-', alpha=0.75, label=None, color=color, markersize=3)
+                    
+                    # Agregar barras de error si hay datos de incertidumbre
+                    if uncertainty_data_weekly is not None and 'U_rel_k2' in uncertainty_data_weekly.columns:
+                        yerr = []
+                        uncertainty_index = uncertainty_data_weekly.index
+                        # Asegurar que las fechas tengan el mismo timezone
+                        if x.tz is None and uncertainty_index.tz is not None:
+                            x = x.tz_localize('UTC')
+                        elif x.tz is not None and uncertainty_index.tz is None:
+                            uncertainty_index = uncertainty_index.tz_localize('UTC')
+                        elif x.tz is not None and uncertainty_index.tz is not None:
+                            uncertainty_index = uncertainty_index.tz_convert(x.tz)
+                        
+                        for i, date in enumerate(x):
+                            sr_val = y[i]  # Usar valor directamente de y
+                            if pd.notna(sr_val):
+                                # Buscar fecha más cercana en datos de incertidumbre
+                                if date in uncertainty_index:
+                                    u_rel = uncertainty_data_weekly.loc[date, 'U_rel_k2']
+                                else:
+                                    time_diffs = abs(uncertainty_index - date)
+                                    closest_idx = time_diffs.argmin()
+                                    if time_diffs[closest_idx] <= pd.Timedelta(days=3):
+                                        u_rel = uncertainty_data_weekly.iloc[closest_idx]['U_rel_k2']
+                                    else:
+                                        u_rel = np.nan
+                                
+                                if pd.notna(u_rel):
+                                    yerr.append(u_rel * sr_val / 100.0)
+                                else:
+                                    yerr.append(0)
+                            else:
+                                yerr.append(0)
+                        
+                        errorbar_result = ax1.errorbar(x, y, yerr=yerr, fmt='o-', alpha=0.75, label=None, 
+                                             color=color, markersize=3, capsize=3, capthick=1.5,
+                                             elinewidth=1.5, ecolor=color)
+                        puntos = errorbar_result[0]  # errorbar devuelve (line, caplines, barlinecols)
+                    else:
+                        puntos, = ax1.plot(x, y, 'o-', alpha=0.75, label=None, color=color, markersize=3)
+                    
                     tendencia, = ax1.plot(x, p(x_num), '--', alpha=0.7, label=None, color=color)
                     handles.append(puntos)
                     labels.append(f'{label}')
@@ -348,7 +434,7 @@ def analyze_dustiq_data(
                 ax2.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
                 plt.setp(ax2.get_xticklabels(), rotation=45, ha='right', fontsize=8)
                 
-                ax2.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+                ax2.legend(loc='best', frameon=True)
                 ax2.set_ylim([95, 102])
                 # Establecer límites del eje x dinámicamente
                 ax2.set_xlim([start_date_for_xlim, end_date_for_xlim])
@@ -492,8 +578,44 @@ def analyze_dustiq_data(
                     # Usar el primer color del ciclo de matplotlib
                     color = plt.rcParams['axes.prop_cycle'].by_key()['color'][0]
                     
-                    # Graficar datos con matplotlib
-                    ax1_2.plot(x1_2, y1_2, 'o-', alpha=0.75, label='Soiling Ratio Q25 (+/- 60 min)', color=color, markersize=3)
+                    # Agregar barras de error si hay datos de incertidumbre diaria
+                    if uncertainty_data_daily is not None and 'U_rel_k2' in uncertainty_data_daily.columns:
+                        yerr_1_2 = []
+                        uncertainty_index = uncertainty_data_daily.index
+                        # Asegurar que las fechas tengan el mismo timezone
+                        if x1_2.tz is None and uncertainty_index.tz is not None:
+                            x1_2 = x1_2.tz_localize('UTC')
+                        elif x1_2.tz is not None and uncertainty_index.tz is None:
+                            uncertainty_index = uncertainty_index.tz_localize('UTC')
+                        elif x1_2.tz is not None and uncertainty_index.tz is not None:
+                            uncertainty_index = uncertainty_index.tz_convert(x1_2.tz)
+                        
+                        for i, date in enumerate(x1_2):
+                            sr_val = y1_2[i]
+                            if pd.notna(sr_val):
+                                if date in uncertainty_index:
+                                    u_rel = uncertainty_data_daily.loc[date, 'U_rel_k2']
+                                else:
+                                    time_diffs = abs(uncertainty_index - date)
+                                    closest_idx = time_diffs.argmin()
+                                    if time_diffs[closest_idx] <= pd.Timedelta(days=1):
+                                        u_rel = uncertainty_data_daily.iloc[closest_idx]['U_rel_k2']
+                                    else:
+                                        u_rel = np.nan
+                                
+                                if pd.notna(u_rel):
+                                    yerr_1_2.append(u_rel * sr_val / 100.0)
+                                else:
+                                    yerr_1_2.append(0)
+                            else:
+                                yerr_1_2.append(0)
+                        
+                        errorbar_result = ax1_2.errorbar(x1_2, y1_2, yerr=yerr_1_2, fmt='o-', alpha=0.75, 
+                                                       label='Soiling Ratio Q25 (+/- 60 min)', color=color, markersize=3,
+                                                       capsize=3, capthick=1.5, elinewidth=1.5, ecolor=color)
+                    else:
+                        # Graficar datos sin barras de error
+                        ax1_2.plot(x1_2, y1_2, 'o-', alpha=0.75, label='Soiling Ratio Q25 (+/- 60 min)', color=color, markersize=3)
                     
                     # Graficar línea de tendencia solo para datos válidos
                     x1_2_valid = x1_2[valid_mask]
@@ -595,8 +717,46 @@ def analyze_dustiq_data(
                 r2_2_1 = 1 - (ss_res2_1 / ss_tot2_1)
                 # Usar el primer color del ciclo de matplotlib
                 color = plt.rcParams['axes.prop_cycle'].by_key()['color'][0]
-                # Graficar datos SOLO con matplotlib
-                ax2_1.plot(x2_1, y2_1, 'o-', alpha=0.75, label='DustIQ Q25 Weekly', color=color, markersize=3)
+                
+                # Agregar barras de error si hay datos de incertidumbre semanal
+                if uncertainty_data_weekly is not None and 'U_rel_k2' in uncertainty_data_weekly.columns:
+                    yerr_2_1 = []
+                    uncertainty_index = uncertainty_data_weekly.index
+                    # Asegurar que las fechas tengan el mismo timezone
+                    if x2_1.tz is None and uncertainty_index.tz is not None:
+                        x2_1 = x2_1.tz_localize('UTC')
+                    elif x2_1.tz is not None and uncertainty_index.tz is None:
+                        uncertainty_index = uncertainty_index.tz_localize('UTC')
+                    elif x2_1.tz is not None and uncertainty_index.tz is not None:
+                        uncertainty_index = uncertainty_index.tz_convert(x2_1.tz)
+                    
+                    for i, date in enumerate(x2_1):
+                        sr_val = y2_1[i]
+                        if pd.notna(sr_val):
+                            if date in uncertainty_index:
+                                u_rel = uncertainty_data_weekly.loc[date, 'U_rel_k2']
+                            else:
+                                time_diffs = abs(uncertainty_index - date)
+                                closest_idx = time_diffs.argmin()
+                                if time_diffs[closest_idx] <= pd.Timedelta(days=3):
+                                    u_rel = uncertainty_data_weekly.iloc[closest_idx]['U_rel_k2']
+                                else:
+                                    u_rel = np.nan
+                            
+                            if pd.notna(u_rel):
+                                yerr_2_1.append(u_rel * sr_val / 100.0)
+                            else:
+                                yerr_2_1.append(0)
+                        else:
+                            yerr_2_1.append(0)
+                    
+                    errorbar_result = ax2_1.errorbar(x2_1, y2_1, yerr=yerr_2_1, fmt='o-', alpha=0.75, 
+                                                   label='DustIQ Q25 Weekly', color=color, markersize=3,
+                                                   capsize=3, capthick=1.5, elinewidth=1.5, ecolor=color)
+                else:
+                    # Graficar datos sin barras de error
+                    ax2_1.plot(x2_1, y2_1, 'o-', alpha=0.75, label='DustIQ Q25 Weekly', color=color, markersize=3)
+                
                 # Graficar línea de tendencia sobre los mismos puntos
                 ax2_1.plot(x2_1, p2_1(x2_1_num), '--', alpha=0.7, label=f'Trend= {z2_1[0]*7:.3f}[%/week], R²={r2_2_1:.3f})', color=color)
                 # Eje x: solo meses y años
@@ -1077,8 +1237,7 @@ def run_analysis():
     BASE_OUTPUT_GRAPH_DIR = paths.BASE_OUTPUT_GRAPH_DIR
 
     # Archivo de datos DustIQ
-    DUSTIQ_DATA_FILENAME = paths.DUSTIQ_RAW_DATA_FILENAME
-    DUSTIQ_CSV_FILEPATH = os.path.join(BASE_INPUT_DIR, DUSTIQ_DATA_FILENAME)
+    DUSTIQ_CSV_FILEPATH = paths.DUSTIQ_RAW_DATA_FILE
 
     # Fechas de análisis
     start_date_dustiq_str = '2024-06-24'  # Última semana de junio 2024
@@ -1101,5 +1260,5 @@ def run_analysis():
 if __name__ == "__main__":
     # Solo se ejecuta cuando el archivo se ejecuta directamente
     print("[INFO] Ejecutando análisis de DustIQ...")
-    raw_data_filepath = os.path.join(paths.BASE_INPUT_DIR, paths.DUSTIQ_RAW_DATA_FILENAME)
+    raw_data_filepath = paths.DUSTIQ_RAW_DATA_FILE
     analyze_dustiq_data(raw_data_filepath, paths.BASE_OUTPUT_GRAPH_DIR) 

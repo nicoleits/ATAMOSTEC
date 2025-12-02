@@ -1,0 +1,119 @@
+================================================================================
+REPORTE DE INCERTIDUMBRE DE SOILING RATIO (PROPAGACIÓN GUM)
+================================================================================
+
+Fecha de análisis: 2025-12-02 15:43:38
+
+CONFIGURACIÓN:
+--------------------------------------------------------------------------------
+Columna celda sucia (S): 1RC411(w.m-2)
+Columna celda limpia (C): 1RC412(w.m-2)
+Intervalo de muestreo: 1 minuto
+Timezone para agregaciones: America/Santiago
+
+INCERTIDUMBRES DEL FABRICANTE (Si-V-10TC-T, k=2):
+--------------------------------------------------------------------------------
+Incertidumbre aditiva (k=2): U_add_k2 = 5.0 W/m²
+Incertidumbre de escala (k=2): U_scale_k2 = 2.50%
+Factor de cobertura: k_expand = 2.0
+
+CONVERSIÓN A k=1 (1σ):
+--------------------------------------------------------------------------------
+u_add = U_add_k2 / 2 = 2.5 W/m²
+u_scale = U_scale_k2 / 2 = 1.250% (0.0125)
+
+FÓRMULAS DE PROPAGACIÓN:
+--------------------------------------------------------------------------------
+1. Incertidumbre por canal:
+   u(I)² = u_add² + (u_scale * I)²
+
+2. Soiling Ratio:
+   SR = 100 * S / C
+
+3. Derivadas parciales:
+   ∂SR/∂S = 100 / C
+   ∂SR/∂C = -100 * S / C²
+
+4. Varianza propagada (GUM, primer orden):
+   Var(SR) = (∂SR/∂S)² * u(S)² + (∂SR/∂C)² * u(C)² + 2 * (∂SR/∂S) * (∂SR/∂C) * Cov(S,C)
+   donde Cov(S,C) = rho * u(S) * u(C)
+   (Por defecto: rho = 0.0, independencia entre canales)
+
+5. Incertidumbre expandida:
+   U_SR_k2 = k_expand * u_SR_k1
+
+RESULTADOS DE CAMPAÑA (GLOBAL):
+--------------------------------------------------------------------------------
+Total de minutos válidos: 70,061
+Incertidumbre de campaña GLOBAL (k=1): u_campaign_k1_rel = 1.809%
+Incertidumbre de campaña GLOBAL (k=2): U_campaign_k2_rel = 3.618%
+
+⚠️  NOTA IMPORTANTE:
+   La incertidumbre global puede no ser representativa si el SR varía
+   significativamente con el tiempo de exposición. Se recomienda usar
+   la incertidumbre LOCAL calculada para cada período (ver secciones siguientes).
+
+ESTADÍSTICAS DE SR:
+--------------------------------------------------------------------------------
+SR promedio: 98.20%
+SR mínimo: 86.48%
+SR máximo: 196.16%
+SR desviación estándar: 1.77%
+
+ESTADÍSTICAS DE INCERTIDUMBRE:
+--------------------------------------------------------------------------------
+U_SR_k2_rel promedio: 3.618%
+U_SR_k2_rel desviación estándar: 0.102%
+U_SR_k2_rel - P25: 3.597%, P50: 3.605%, P75: 3.618%
+
+NOTAS:
+--------------------------------------------------------------------------------
+- Propagación calculada minuto a minuto sobre toda la campaña
+- Independencia entre canales asumida (Cov=0, rho=0.0)
+- Incertidumbre expandida a k=2 según GUM
+- Agregaciones (diarias/semanales/mensuales) usan Q25
+- ⭐ MEJORA: Las agregaciones usan incertidumbre LOCAL calculada para cada período
+  en lugar de una incertidumbre global, lo cual es más representativo cuando
+  el SR varía con el tiempo de exposición.
+- Intervalos de confianza al 95%: CI = SR_agg * (1 ± U_local_k2_rel)
+
+INCERTIDUMBRE POR PERÍODO TEMPORAL (MENSUAL):
+--------------------------------------------------------------------------------
+Esta es más representativa que la incertidumbre global cuando el SR varía con el tiempo.
+
+  2024-08: U_k2_rel = 3.619% ± 0.086% (SR promedio: 100.40%, n=9,331.0 minutos)
+  2024-09: U_k2_rel = 3.604% ± 0.018% (SR promedio: 99.18%, n=8,571.0 minutos)
+  2024-10: U_k2_rel = 3.619% ± 0.133% (SR promedio: 99.11%, n=9,229.0 minutos)
+  2024-11: U_k2_rel = 3.607% ± 0.013% (SR promedio: 98.77%, n=8,938.0 minutos)
+  2024-12: U_k2_rel = 3.608% ± 0.014% (SR promedio: 96.96%, n=5,549.0 minutos)
+  2025-01: U_k2_rel = 3.608% ± 0.019% (SR promedio: 97.24%, n=7,469.0 minutos)
+  2025-02: U_k2_rel = 3.612% ± 0.051% (SR promedio: 96.86%, n=7,980.0 minutos)
+  2025-03: U_k2_rel = 3.605% ± 0.012% (SR promedio: 96.60%, n=5,101.0 minutos)
+  2025-04: U_k2_rel = 3.631% ± 0.110% (SR promedio: 95.85%, n=1,593.0 minutos)
+  2025-05: U_k2_rel = 3.692% ± 0.282% (SR promedio: 97.01%, n=5,251.0 minutos)
+  2025-06: U_k2_rel = 3.642% ± 0.035% (SR promedio: 98.43%, n=1,049.0 minutos)
+
+INCERTIDUMBRE POR RANGOS DE SR:
+--------------------------------------------------------------------------------
+Muestra cómo varía la incertidumbre con el nivel de soiling.
+
+  (80.0, 90.0]: U_k2_rel = 3.718% ± 0.102% (n=3 minutos)
+  (90.0, 95.0]: U_k2_rel = 3.727% ± 0.319% (n=1,653 minutos)
+  (95.0, 100.0]: U_k2_rel = 3.615% ± 0.093% (n=60,315 minutos)
+  (100.0, 105.0]: U_k2_rel = 3.615% ± 0.040% (n=8,078 minutos)
+  (105.0, 200.0]: U_k2_rel = 4.391% ± 0.664% (n=12 minutos)
+
+ANÁLISIS DE SENSIBILIDAD (Correlación entre canales):
+--------------------------------------------------------------------------------
+  rho = 0.0: U_campaign_k2_rel = 3.752%
+  rho = 0.3: U_campaign_k2_rel = 3.148%
+  rho = 0.5: U_campaign_k2_rel = 2.670%
+
+ARCHIVOS GENERADOS:
+--------------------------------------------------------------------------------
+Minutal: /home/nicole/ATAMOSTEC/ATAMOSTEC2/ATAMOSTEC/propagacion de errores/ref_cell/mediodia_solar/sr_minute_with_uncertainty.csv
+Diario: /home/nicole/ATAMOSTEC/ATAMOSTEC2/ATAMOSTEC/propagacion de errores/ref_cell/mediodia_solar/sr_daily_abs_with_U.csv
+Semanal: /home/nicole/ATAMOSTEC/ATAMOSTEC2/ATAMOSTEC/propagacion de errores/ref_cell/mediodia_solar/sr_weekly_abs_with_U.csv
+Mensual: /home/nicole/ATAMOSTEC/ATAMOSTEC2/ATAMOSTEC/propagacion de errores/ref_cell/mediodia_solar/sr_monthly_abs_with_U.csv
+Este resumen: /home/nicole/ATAMOSTEC/ATAMOSTEC2/ATAMOSTEC/propagacion de errores/ref_cell/mediodia_solar/sr_uncertainty_summary.txt
+================================================================================

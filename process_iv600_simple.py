@@ -25,8 +25,10 @@ def process_iv600_simple():
     
     logger.info("=== PROCESANDO IV600 DE MANERA SIMPLE ===")
     
-    # Cargar datos IV600
-    csv_path = '/home/nicole/SR/SOILING/datos/raw_iv600_data.csv'
+    # Cargar datos IV600 - ruta relativa al proyecto
+    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+    PROJECT_ROOT = SCRIPT_DIR
+    csv_path = os.path.join(PROJECT_ROOT, 'datos', 'raw_iv600_data.csv')
     
     if not os.path.exists(csv_path):
         logger.error(f"Archivo no encontrado: {csv_path}")
@@ -118,8 +120,10 @@ def process_iv600_simple():
         logger.info(f"Rango de fechas: {df_final.index.min()} a {df_final.index.max()}")
         logger.info(f"Rango de SR: {df_final['SR_IV600'].min():.2f}% a {df_final['SR_IV600'].max():.2f}%")
         
-        # Guardar datos procesados
-        output_dir = '/home/nicole/SR/SOILING/datos_procesados_analisis_integrado_py/iv600'
+        # Guardar datos procesados - ruta relativa al proyecto
+        SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+        PROJECT_ROOT = SCRIPT_DIR
+        output_dir = os.path.join(PROJECT_ROOT, 'datos_procesados_analisis_integrado_py', 'iv600')
         os.makedirs(output_dir, exist_ok=True)
         
         output_path = os.path.join(output_dir, 'iv600_sr_unified_hours_oct_mar.csv')

@@ -45,8 +45,11 @@ warnings.filterwarnings('ignore')
 plt.style.use('seaborn-v0_8-darkgrid')
 sns.set_palette("husl")
 
-# Directorios
-BASE_DIR = "/home/atamos/atamostec/ATAMOSTEC/ATAMOSTEC/datos"
+# Directorios - ruta relativa al directorio del proyecto
+# Obtener el directorio del script y construir la ruta relativa
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)  # Subir un nivel desde analysis/
+BASE_DIR = os.path.join(PROJECT_ROOT, "datos")
 SOLYS2_FILE = os.path.join(BASE_DIR, "solys2", "raw_solys2_data.csv")
 LALCKTUR_FILE = os.path.join(BASE_DIR, "lalcktur", "raw_lalcktur_data.csv")
 OUTPUT_DIR = os.path.join(BASE_DIR, "comparison_solys2_lalcktur")
