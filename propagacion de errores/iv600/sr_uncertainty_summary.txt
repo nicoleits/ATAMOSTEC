@@ -1,0 +1,42 @@
+================================================================================
+RESUMEN DE INCERTIDUMBRE DE IV600
+================================================================================
+
+Fecha de análisis: 2025-12-03 13:55:21
+Archivo de entrada: /home/atamos/atamostec/ATAMOSTEC/ATAMOSTEC/datos/iv600/raw_iv600_data.csv
+Total de puntos: 70303
+
+ESTADÍSTICAS DE INCERTIDUMBRE:
+--------------------------------------------------------------------------------
+SR_Isc_1MD434vs1MD439_U_k2_rel_max: 0.002828
+SR_Isc_1MD434vs1MD439_U_k2_rel_mean: 0.002828
+SR_Isc_1MD434vs1MD439_U_k2_rel_min: 0.002828
+SR_Isc_1MD434vs1MD439_U_k2_rel_std: 0.000000
+SR_Isc_1MD434vs1MD439_u_k1_rel_max: 0.001414
+SR_Isc_1MD434vs1MD439_u_k1_rel_mean: 0.001414
+SR_Isc_1MD434vs1MD439_u_k1_rel_min: 0.001414
+SR_Isc_1MD434vs1MD439_u_k1_rel_std: 0.000000
+SR_Isc_1MD440vs1MD439_U_k2_rel_max: 0.002828
+SR_Isc_1MD440vs1MD439_U_k2_rel_mean: 0.002828
+SR_Isc_1MD440vs1MD439_U_k2_rel_min: 0.002828
+SR_Isc_1MD440vs1MD439_U_k2_rel_std: 0.000000
+SR_Isc_1MD440vs1MD439_u_k1_rel_max: 0.001414
+SR_Isc_1MD440vs1MD439_u_k1_rel_mean: 0.001414
+SR_Isc_1MD440vs1MD439_u_k1_rel_min: 0.001414
+SR_Isc_1MD440vs1MD439_u_k1_rel_std: 0.000000
+SR_Pmax_1MD434vs1MD439_U_k2_rel_max: 0.045130
+SR_Pmax_1MD434vs1MD439_U_k2_rel_mean: 0.031202
+SR_Pmax_1MD434vs1MD439_U_k2_rel_min: 0.026439
+SR_Pmax_1MD434vs1MD439_U_k2_rel_std: 0.002089
+SR_Pmax_1MD434vs1MD439_u_k1_rel_max: 0.022565
+SR_Pmax_1MD434vs1MD439_u_k1_rel_mean: 0.015601
+SR_Pmax_1MD434vs1MD439_u_k1_rel_min: 0.013220
+SR_Pmax_1MD434vs1MD439_u_k1_rel_std: 0.001045
+SR_Pmax_1MD440vs1MD439_U_k2_rel_max: 0.043917
+SR_Pmax_1MD440vs1MD439_U_k2_rel_mean: 0.031191
+SR_Pmax_1MD440vs1MD439_U_k2_rel_min: 0.026095
+SR_Pmax_1MD440vs1MD439_U_k2_rel_std: 0.002054
+SR_Pmax_1MD440vs1MD439_u_k1_rel_max: 0.021958
+SR_Pmax_1MD440vs1MD439_u_k1_rel_mean: 0.015596
+SR_Pmax_1MD440vs1MD439_u_k1_rel_min: 0.013047
+SR_Pmax_1MD440vs1MD439_u_k1_rel_std: 0.001027

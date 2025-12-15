@@ -123,36 +123,46 @@ def plot_uncertainty_by_hour(df):
     horas_validas = sorted(df['hora'].unique())
     data_by_hour = [df[df['hora'] == h]['U_SR_k2_rel_pct'].dropna() for h in horas_validas]
     
-    bp = ax1.boxplot(data_by_hour, labels=horas_validas, patch_artist=True)
+    # Boxplot usa posiciones 1, 2, 3, ... (1-indexed)
+    bp = ax1.boxplot(data_by_hour, patch_artist=True)
     for patch in bp['boxes']:
         patch.set_facecolor('lightblue')
         patch.set_alpha(0.7)
     
-    ax1.set_xlabel('Hora del día', fontsize=12)
-    ax1.set_ylabel('Incertidumbre U_SR_k2 (%)', fontsize=12)
-    ax1.set_title('Distribución de Incertidumbre por Hora del Día (05:00-21:00)', fontsize=14, fontweight='bold')
+    ax1.set_xlabel('Time of Day', fontsize=12)
+    ax1.set_ylabel(r'Uncertainty $U_{SR,k=2}$ (%)', fontsize=12)
+    ax1.set_title('Uncertainty Distribution by Time of Day (05:00-21:00)', fontsize=14, fontweight='bold')
     ax1.grid(True, alpha=0.3)
-    # Mostrar solo horas válidas, cada 2 horas
-    tick_positions = [h for h in horas_validas if h % 2 == 0 or h == horas_validas[0] or h == horas_validas[-1]]
+    
+    # Configurar ticks correctamente: usar posiciones (1-indexed) y etiquetas de horas
+    # tick_positions son las posiciones en el gráfico (1, 2, 3, ...)
+    # tick_labels son las horas correspondientes
+    tick_positions = []
+    tick_labels = []
+    for i, h in enumerate(horas_validas, start=1):  # start=1 porque boxplot es 1-indexed
+        if h % 2 == 0 or h == horas_validas[0] or h == horas_validas[-1]:
+            tick_positions.append(i)
+            tick_labels.append(f'{h:02d}:00')
+    
     ax1.set_xticks(tick_positions)
-    ax1.set_xticklabels([f'{h:02d}:00' for h in tick_positions])
+    ax1.set_xticklabels(tick_labels)
     
     # Gráfico 2: Promedio y percentiles por hora
     ax2 = axes[1]
     hourly_stats = df.groupby('hora')['U_SR_k2_rel_pct'].agg(['mean', 'median', 'std', 'count'])
     
-    ax2.plot(hourly_stats.index, hourly_stats['mean'], 'o-', label='Promedio', linewidth=2, markersize=6)
+    ax2.plot(hourly_stats.index, hourly_stats['mean'], 'o-', label='Mean', linewidth=2, markersize=6)
     ax2.fill_between(
         hourly_stats.index,
         hourly_stats['mean'] - hourly_stats['std'],
         hourly_stats['mean'] + hourly_stats['std'],
-        alpha=0.3, label='±1 Desviación Estándar'
+        alpha=0.3, label='±1 Standard Deviation'
     )
-    ax2.plot(hourly_stats.index, hourly_stats['median'], 's--', label='Mediana', linewidth=2, markersize=4)
+    ax2.plot(hourly_stats.index, hourly_stats['median'], 's--', label='Median', linewidth=2, markersize=4)
     
-    ax2.set_xlabel('Hora del día', fontsize=12)
-    ax2.set_ylabel('Incertidumbre U_SR_k2 (%)', fontsize=12)
-    ax2.set_title('Estadísticas de Incertidumbre por Hora del Día (05:00-21:00)', fontsize=14, fontweight='bold')
+    ax2.set_xlabel('Time of Day', fontsize=12)
+    ax2.set_ylabel(r'Uncertainty $U_{SR,k=2}$ (%)', fontsize=12)
+    ax2.set_title('Uncertainty Statistics by Time of Day (05:00-21:00)', fontsize=14, fontweight='bold')
     ax2.legend(loc='best')
     ax2.grid(True, alpha=0.3)
     tick_positions = [h for h in horas_validas if h % 2 == 0 or h == horas_validas[0] or h == horas_validas[-1]]
