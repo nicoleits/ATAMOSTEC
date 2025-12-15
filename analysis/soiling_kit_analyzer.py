@@ -250,7 +250,104 @@ def analyze_soiling_kit_data(raw_data_filepath: str) -> bool:
             sr_weekly_raw_q25.to_csv(os.path.join(paths.SOILING_KIT_OUTPUT_SUBDIR_CSV, 'soiling_kit_sr_raw_weekly_q25.csv'), header=True)
         if not sr_weekly_corrected_q25.empty:
             sr_weekly_corrected_q25.to_csv(os.path.join(paths.SOILING_KIT_OUTPUT_SUBDIR_CSV, 'soiling_kit_sr_corrected_weekly_q25.csv'), header=True)
-        logger.info("SRs agregados (diario mean, semanal q25) guardados.")
+        
+        # SR Mensual (Q25)
+        sr_monthly_raw_q25 = df_sk_sr_filtered['SR_Raw_Filtered'].resample('ME').quantile(0.25).dropna()
+        sr_monthly_corrected_q25 = df_sk_sr_filtered['SR_TempCorrected_Filtered'].resample('ME').quantile(0.25).dropna()
+        if not sr_monthly_raw_q25.empty:
+            sr_monthly_raw_q25.to_csv(os.path.join(paths.SOILING_KIT_OUTPUT_SUBDIR_CSV, 'soiling_kit_sr_raw_monthly_q25.csv'), header=True)
+        if not sr_monthly_corrected_q25.empty:
+            sr_monthly_corrected_q25.to_csv(os.path.join(paths.SOILING_KIT_OUTPUT_SUBDIR_CSV, 'soiling_kit_sr_corrected_monthly_q25.csv'), header=True)
+        
+        logger.info("SRs agregados (diario mean, semanal q25, mensual q25) guardados.")
+
+        # --- 8.5. Cargar datos de incertidumbre para agregar barras de error a los gráficos ---
+        uncertainty_data_daily = None
+        uncertainty_data_weekly = None
+        uncertainty_data_monthly = None
+        
+        try:
+            if os.path.exists(paths.SOILING_KIT_SR_DAILY_ABS_WITH_U_FILE):
+                uncertainty_data_daily = pd.read_csv(paths.SOILING_KIT_SR_DAILY_ABS_WITH_U_FILE, index_col=0, parse_dates=True)
+                logger.info(f"✅ Datos de incertidumbre diarios cargados: {len(uncertainty_data_daily)} puntos")
+            else:
+                logger.warning(f"⚠️  Archivo de incertidumbre diario no encontrado en: {paths.SOILING_KIT_SR_DAILY_ABS_WITH_U_FILE}")
+                logger.info("   Los gráficos se generarán sin barras de error.")
+        except Exception as e:
+            logger.warning(f"⚠️  Error al cargar datos de incertidumbre diarios: {e}")
+        
+        try:
+            if os.path.exists(paths.SOILING_KIT_SR_WEEKLY_ABS_WITH_U_FILE):
+                uncertainty_data_weekly = pd.read_csv(paths.SOILING_KIT_SR_WEEKLY_ABS_WITH_U_FILE, index_col=0, parse_dates=True)
+                logger.info(f"✅ Datos de incertidumbre semanales cargados: {len(uncertainty_data_weekly)} puntos")
+            else:
+                logger.warning(f"⚠️  Archivo de incertidumbre semanal no encontrado en: {paths.SOILING_KIT_SR_WEEKLY_ABS_WITH_U_FILE}")
+        except Exception as e:
+            logger.warning(f"⚠️  Error al cargar datos de incertidumbre semanales: {e}")
+        
+        try:
+            # Intentar cargar datos de incertidumbre mensuales (si existen)
+            if os.path.exists(paths.SOILING_KIT_SR_MONTHLY_ABS_WITH_U_FILE):
+                uncertainty_data_monthly = pd.read_csv(paths.SOILING_KIT_SR_MONTHLY_ABS_WITH_U_FILE, index_col=0, parse_dates=True)
+                logger.info(f"✅ Datos de incertidumbre mensuales cargados: {len(uncertainty_data_monthly)} puntos")
+            else:
+                logger.info(f"   Archivo de incertidumbre mensual no encontrado en: {paths.SOILING_KIT_SR_MONTHLY_ABS_WITH_U_FILE}")
+                logger.info("   El gráfico se generará sin barras de error.")
+        except Exception as e:
+            logger.warning(f"⚠️  Error al cargar datos de incertidumbre mensuales: {e}")
+        
+        # Función auxiliar para obtener barras de error de incertidumbre
+        def get_error_bars(sr_series, uncertainty_data):
+            """
+            Obtiene las barras de error (yerr) para una serie de SR usando datos de incertidumbre.
+            
+            Args:
+                sr_series: Serie de pandas con valores de SR
+                uncertainty_data: DataFrame con datos de incertidumbre (debe tener índice de fechas y columna 'U_rel_k2')
+            
+            Returns:
+                Lista de valores de error (yerr) para usar con errorbar() o None si no hay datos
+            """
+            if uncertainty_data is None or 'U_rel_k2' not in uncertainty_data.columns:
+                return None
+            
+            yerr = []
+            uncertainty_index = uncertainty_data.index
+            
+            # Determinar tolerancia basada en la frecuencia de los datos
+            # Si hay menos de 20 puntos, probablemente es mensual o semanal
+            if len(sr_series) < 20:
+                max_tolerance = pd.Timedelta(days=15)  # Mayor tolerancia para mensual
+            elif len(sr_series) < 100:
+                max_tolerance = pd.Timedelta(days=3)   # Tolerancia para semanal
+            else:
+                max_tolerance = pd.Timedelta(days=1)   # Tolerancia para diario
+            
+            for date in sr_series.index:
+                sr_val = sr_series.loc[date]
+                if pd.notna(sr_val):
+                    # Buscar fecha exacta o más cercana
+                    if date in uncertainty_index:
+                        u_rel = uncertainty_data.loc[date, 'U_rel_k2']
+                    else:
+                        # Encontrar la fecha más cercana dentro de la tolerancia
+                        time_diffs = abs(uncertainty_index - date)
+                        closest_idx = time_diffs.argmin()
+                        if time_diffs[closest_idx] <= max_tolerance:
+                            u_rel = uncertainty_data.iloc[closest_idx]['U_rel_k2']
+                        else:
+                            u_rel = np.nan
+                    
+                    if pd.notna(u_rel):
+                        # Incertidumbre absoluta = incertidumbre relativa * valor
+                        # u_rel está en porcentaje (%), convertir a valor absoluto
+                        yerr.append(u_rel * sr_val / 100.0)
+                    else:
+                        yerr.append(0)
+                else:
+                    yerr.append(0)
+            
+            return yerr if any(err > 0 for err in yerr) else None
 
         # --- 9. Generación de Gráficos ---
         logger.info("Generando gráficos para Soiling Kit...")
@@ -291,7 +388,20 @@ def analyze_soiling_kit_data(raw_data_filepath: str) -> bool:
         # SR Raw (Media Diaria)
         if not sr_daily_raw_mean.empty:
             fig3, ax3 = plt.subplots(figsize=(15, 7))
-            sr_daily_raw_mean.plot(ax=ax3, label='Raw SR (Daily Average)', style='-*')
+            
+            # Intentar obtener barras de error
+            yerr_daily_raw = get_error_bars(sr_daily_raw_mean, uncertainty_data_daily)
+            
+            if yerr_daily_raw is not None:
+                # Graficar con barras de error
+                avg_error = np.mean([e for e in yerr_daily_raw if e > 0])
+                logger.info(f"   📊 Agregando barras de error para SR Raw diario (error promedio: {avg_error:.2f}%)")
+                ax3.errorbar(sr_daily_raw_mean.index, sr_daily_raw_mean.values, yerr=yerr_daily_raw, 
+                            fmt='-*', alpha=0.75, label='Raw SR (Daily Average)', 
+                            markersize=6, capsize=4, capthick=2.0, elinewidth=2.0, ecolor='blue')
+            else:
+                # Graficar sin barras de error
+                sr_daily_raw_mean.plot(ax=ax3, label='Raw SR (Daily Average)', style='-*')
             
             # Calcular y graficar tendencia
             slope, intercept, trend_values = _calculate_trend(sr_daily_raw_mean)
@@ -303,6 +413,7 @@ def analyze_soiling_kit_data(raw_data_filepath: str) -> bool:
             ax3.set_xlabel('Time', fontsize=14)
             ax3.grid(True)
             ax3.set_title(f'Soiling Kit - Raw SR (Daily Average, SR > {sr_threshold}%)', fontsize=16)
+            ax3.set_ylim(50, 115)
             if ax3.has_data(): ax3.legend(fontsize=12)
             ax3.tick_params(axis='both', labelsize=12)
             ax3.xaxis.set_major_formatter(date_fmt_daily)
@@ -314,7 +425,20 @@ def analyze_soiling_kit_data(raw_data_filepath: str) -> bool:
         # SR Corregido (Media Diaria)
         if not sr_daily_corrected_mean.empty:
             fig4, ax4 = plt.subplots(figsize=(15, 7))
-            sr_daily_corrected_mean.plot(ax=ax4, label='Temperature Corrected SR (Daily Average)')
+            
+            # Intentar obtener barras de error
+            yerr_daily_corrected = get_error_bars(sr_daily_corrected_mean, uncertainty_data_daily)
+            
+            if yerr_daily_corrected is not None:
+                # Graficar con barras de error
+                avg_error = np.mean([e for e in yerr_daily_corrected if e > 0])
+                logger.info(f"   📊 Agregando barras de error para SR Corregido diario (error promedio: {avg_error:.2f}%)")
+                ax4.errorbar(sr_daily_corrected_mean.index, sr_daily_corrected_mean.values, yerr=yerr_daily_corrected, 
+                            fmt='-o', alpha=0.75, label='Temperature Corrected SR (Daily Average)', 
+                            markersize=4, capsize=4, capthick=2.0, elinewidth=2.0, ecolor='blue')
+            else:
+                # Graficar sin barras de error
+                sr_daily_corrected_mean.plot(ax=ax4, label='Temperature Corrected SR (Daily Average)')
             
             # Calcular y graficar tendencia
             slope, intercept, trend_values = _calculate_trend(sr_daily_corrected_mean)
@@ -326,6 +450,7 @@ def analyze_soiling_kit_data(raw_data_filepath: str) -> bool:
             ax4.set_xlabel('Time', fontsize=14)
             ax4.grid(True)
             ax4.set_title(f'Soiling Kit - Temperature Corrected SR (Daily Average, SR > {sr_threshold}%)', fontsize=16)
+            ax4.set_ylim(50, 115)
             if ax4.has_data(): ax4.legend(fontsize=12)
             ax4.tick_params(axis='both', labelsize=12)
             ax4.xaxis.set_major_formatter(date_fmt_daily)
@@ -348,6 +473,7 @@ def analyze_soiling_kit_data(raw_data_filepath: str) -> bool:
                 ax5.set_xlabel('Time', fontsize=14)
                 ax5.grid(True)
                 ax5.set_title(f'Soiling Kit - Raw SR by Time Slot (Daily Average, SR > {sr_threshold}%)', fontsize=16)
+                ax5.set_ylim(50, 115)
                 ax5.legend(fontsize=12)
                 ax5.tick_params(axis='both', labelsize=12)
                 ax5.xaxis.set_major_formatter(date_fmt_daily)
@@ -366,6 +492,7 @@ def analyze_soiling_kit_data(raw_data_filepath: str) -> bool:
             ax6.set_xlabel('Time', fontsize=14)
             ax6.grid(True)
             ax6.set_title(f'Soiling Kit - Temperature Corrected SR (Minute and Daily Average, SR > {sr_threshold}%)', fontsize=16)
+            ax6.set_ylim(50, 115)
             if ax6.has_data(): ax6.legend(fontsize=12)
             ax6.tick_params(axis='both', labelsize=12)
             ax6.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d %H:%M')) # Usar formato con hora
@@ -391,15 +518,36 @@ def analyze_soiling_kit_data(raw_data_filepath: str) -> bool:
                 _series_to_plot_raw = sr_weekly_raw_q25.copy()
                 if not _series_to_plot_raw.dropna().empty:
                     temp_sr_weekly_raw = _series_to_plot_raw.dropna()
+                    
+                    # Obtener barras de error ANTES de cambiar los índices
+                    yerr_weekly_raw = get_error_bars(temp_sr_weekly_raw, uncertainty_data_weekly)
+                    
                     x_ticks_labels_raw = [date.strftime('%Y-%m-%d') for date in temp_sr_weekly_raw.index.to_pydatetime()]
                     x_ticks_positions_raw = list(range(len(temp_sr_weekly_raw)))
-                    temp_sr_weekly_raw.index = x_ticks_positions_raw
-                    temp_sr_weekly_raw.plot(ax=ax7, style='-o', label='Raw SR (Weekly Q25)', color=color_raw)
-                    # Calcular y graficar tendencia
-                    slope, intercept, trend_values = _calculate_trend(temp_sr_weekly_raw)
+                    
+                    if yerr_weekly_raw is not None:
+                        # Graficar con barras de error
+                        avg_error = np.mean([e for e in yerr_weekly_raw if e > 0])
+                        logger.info(f"   📊 Agregando barras de error para SR Raw semanal (error promedio: {avg_error:.2f}%)")
+                        ax7.errorbar(x_ticks_positions_raw, temp_sr_weekly_raw.values, yerr=yerr_weekly_raw,
+                                    fmt='o-', label='Raw SR (Weekly Q25)', 
+                                    color=color_raw, markersize=6, linewidth=2, capsize=4, capthick=2.0, elinewidth=2.0, ecolor=color_raw)
+                    else:
+                        # Graficar sin barras de error
+                        temp_sr_weekly_raw.index = x_ticks_positions_raw
+                        temp_sr_weekly_raw.plot(ax=ax7, style='-o', label='Raw SR (Weekly Q25)', color=color_raw)
+                    
+                    # Calcular y graficar tendencia (usar índices numéricos)
+                    temp_sr_weekly_raw_for_trend = temp_sr_weekly_raw.copy()
+                    if temp_sr_weekly_raw_for_trend.index.dtype != np.int64:
+                        temp_sr_weekly_raw_for_trend.index = x_ticks_positions_raw
+                    slope, intercept, trend_values = _calculate_trend(temp_sr_weekly_raw_for_trend)
                     if slope is not None:
                         trend_label = f'Raw Trend ({slope:.2f}%/week)'
-                        ax7.plot(temp_sr_weekly_raw.index, trend_values, '--', color=color_raw, label=trend_label)
+                        ax7.plot(x_ticks_positions_raw, trend_values, '--', color=color_raw, label=trend_label)
+                    
+                    # Guardar índices numéricos para usar en el resto del código
+                    temp_sr_weekly_raw.index = x_ticks_positions_raw
                     plotted_q25 = True
             
             # Procesar SR Corregido
@@ -411,16 +559,44 @@ def analyze_soiling_kit_data(raw_data_filepath: str) -> bool:
                 _series_to_plot_corrected = sr_weekly_corrected_q25.copy()
                 if not _series_to_plot_corrected.dropna().empty:
                     temp_sr_weekly_corrected = _series_to_plot_corrected.dropna()
+                    
+                    # Obtener barras de error ANTES de cambiar los índices
+                    yerr_weekly_corrected = get_error_bars(temp_sr_weekly_corrected, uncertainty_data_weekly)
+                    
                     x_ticks_labels_corrected = [date.strftime('%Y-%m-%d') for date in temp_sr_weekly_corrected.index.to_pydatetime()]
                     x_ticks_positions_corrected = list(range(len(temp_sr_weekly_corrected)))
-                    temp_sr_weekly_corrected.index = x_ticks_positions_corrected
+                    
                     plot_style_corrected = '-s' if plotted_q25 and not sr_weekly_raw_q25.empty else '-o'
-                    temp_sr_weekly_corrected.plot(ax=ax7, style=plot_style_corrected, label='Temperature Corrected SR (Weekly Q25)', color=color_corr)
-                    # Calcular y graficar tendencia
-                    slope, intercept, trend_values = _calculate_trend(temp_sr_weekly_corrected)
+                    
+                    if yerr_weekly_corrected is not None:
+                        # Graficar con barras de error
+                        avg_error = np.mean([e for e in yerr_weekly_corrected if e > 0])
+                        logger.info(f"   📊 Agregando barras de error para SR Corregido semanal (error promedio: {avg_error:.2f}%)")
+                        # Determinar el formato correcto para errorbar
+                        if plotted_q25 and not sr_weekly_raw_q25.empty:
+                            fmt_corrected = 's-'
+                        else:
+                            fmt_corrected = 'o-'
+                        ax7.errorbar(x_ticks_positions_corrected, temp_sr_weekly_corrected.values, yerr=yerr_weekly_corrected,
+                                    fmt=fmt_corrected, label='Temperature Corrected SR (Weekly Q25)', 
+                                    color=color_corr, markersize=6, linewidth=2, capsize=4, capthick=2.0, elinewidth=2.0, ecolor=color_corr)
+                    else:
+                        # Graficar sin barras de error
+                        temp_sr_weekly_corrected.index = x_ticks_positions_corrected
+                        temp_sr_weekly_corrected.plot(ax=ax7, style=plot_style_corrected, label='Temperature Corrected SR (Weekly Q25)', color=color_corr)
+                        # Restaurar índices originales para calcular tendencia
+                        temp_sr_weekly_corrected.index = _series_to_plot_corrected.dropna().index
+                    
+                    # Calcular y graficar tendencia (usar índices numéricos para la tendencia)
+                    temp_sr_weekly_corrected_for_trend = temp_sr_weekly_corrected.copy()
+                    temp_sr_weekly_corrected_for_trend.index = x_ticks_positions_corrected
+                    slope, intercept, trend_values = _calculate_trend(temp_sr_weekly_corrected_for_trend)
                     if slope is not None:
                         trend_label = f'Corrected Trend ({slope:.2f}%/week)'
-                        ax7.plot(temp_sr_weekly_corrected.index, trend_values, '--', color=color_corr, label=trend_label)
+                        ax7.plot(x_ticks_positions_corrected, trend_values, '--', color=color_corr, label=trend_label)
+                    
+                    # Guardar índices numéricos para usar en el resto del código
+                    temp_sr_weekly_corrected.index = x_ticks_positions_corrected
                     plotted_q25 = True
 
             if plotted_q25:
@@ -429,7 +605,7 @@ def analyze_soiling_kit_data(raw_data_filepath: str) -> bool:
                 ax7.grid(True)
                 ax7.set_title(f'Soiling Kit - Weekly SR ', fontsize=16)
                 ax7.legend(loc='best', frameon=True, fontsize=12)
-                ax7.set_ylim(90, 110)
+                ax7.set_ylim(50, 115)
                 final_tick_positions = []
                 final_tick_labels = []
                 # Priorizar etiquetas y posiciones de la serie raw si existe, sino de la corregida.
@@ -459,25 +635,151 @@ def analyze_soiling_kit_data(raw_data_filepath: str) -> bool:
                 logger.info("No hay datos Q25 semanales para graficar.")
                 if 'fig7' in locals() and plt.fignum_exists(fig7.number): plt.close(fig7)
 
+        # SR Mensual Q25 (Raw y Corregido)
+        if not sr_monthly_raw_q25.empty or not sr_monthly_corrected_q25.empty:
+            fig8, ax8 = plt.subplots(figsize=(15, 7))
+            plotted_monthly_q25 = False
+
+            # Procesar SR Raw
+            temp_sr_monthly_raw = pd.Series(dtype=float)
+            x_ticks_labels_raw_monthly = []
+            x_ticks_positions_raw_monthly = []
+            color_raw = '#1f77b4'  # Azul
+            color_corr = '#ff7f0e'  # Naranja
+
+            if not sr_monthly_raw_q25.empty:
+                _series_to_plot_raw_monthly = sr_monthly_raw_q25.copy()
+                if not _series_to_plot_raw_monthly.dropna().empty:
+                    temp_sr_monthly_raw = _series_to_plot_raw_monthly.dropna()
+                    
+                    # Obtener barras de error ANTES de cambiar los índices
+                    yerr_monthly_raw = get_error_bars(temp_sr_monthly_raw, uncertainty_data_monthly)
+                    
+                    x_ticks_labels_raw_monthly = [date.strftime('%Y-%m') for date in temp_sr_monthly_raw.index.to_pydatetime()]
+                    x_ticks_positions_raw_monthly = list(range(len(temp_sr_monthly_raw)))
+                    
+                    if yerr_monthly_raw is not None:
+                        # Graficar con barras de error
+                        avg_error = np.mean([e for e in yerr_monthly_raw if e > 0])
+                        logger.info(f"   📊 Agregando barras de error para SR Raw mensual (error promedio: {avg_error:.2f}%)")
+                        ax8.errorbar(x_ticks_positions_raw_monthly, temp_sr_monthly_raw.values, yerr=yerr_monthly_raw,
+                                    fmt='o-', label='Raw SR (Monthly Q25)', 
+                                    color=color_raw, markersize=8, linewidth=2, capsize=4, capthick=2.0, elinewidth=2.0, ecolor=color_raw)
+                    else:
+                        # Graficar sin barras de error
+                        temp_sr_monthly_raw.index = x_ticks_positions_raw_monthly
+                        temp_sr_monthly_raw.plot(ax=ax8, style='-o', label='Raw SR (Monthly Q25)', color=color_raw, markersize=8)
+                    
+                    # Calcular y graficar tendencia (usar índices numéricos)
+                    temp_sr_monthly_raw_for_trend = temp_sr_monthly_raw.copy()
+                    if temp_sr_monthly_raw_for_trend.index.dtype != np.int64:
+                        temp_sr_monthly_raw_for_trend.index = x_ticks_positions_raw_monthly
+                    slope, intercept, trend_values = _calculate_trend(temp_sr_monthly_raw_for_trend)
+                    if slope is not None:
+                        trend_label = f'Raw Trend ({slope:.2f}%/month)'
+                        ax8.plot(x_ticks_positions_raw_monthly, trend_values, '--', color=color_raw, label=trend_label)
+                    
+                    # Guardar índices numéricos para usar en el resto del código
+                    temp_sr_monthly_raw.index = x_ticks_positions_raw_monthly
+                    plotted_monthly_q25 = True
+            
+            # Procesar SR Corregido
+            temp_sr_monthly_corrected = pd.Series(dtype=float)
+            x_ticks_labels_corrected_monthly = []
+            x_ticks_positions_corrected_monthly = []
+
+            if not sr_monthly_corrected_q25.empty:
+                _series_to_plot_corrected_monthly = sr_monthly_corrected_q25.copy()
+                if not _series_to_plot_corrected_monthly.dropna().empty:
+                    temp_sr_monthly_corrected = _series_to_plot_corrected_monthly.dropna()
+                    
+                    # Obtener barras de error ANTES de cambiar los índices
+                    yerr_monthly_corrected = get_error_bars(temp_sr_monthly_corrected, uncertainty_data_monthly)
+                    
+                    x_ticks_labels_corrected_monthly = [date.strftime('%Y-%m') for date in temp_sr_monthly_corrected.index.to_pydatetime()]
+                    x_ticks_positions_corrected_monthly = list(range(len(temp_sr_monthly_corrected)))
+                    
+                    plot_style_corrected_monthly = '-s' if plotted_monthly_q25 and not sr_monthly_raw_q25.empty else '-o'
+                    
+                    if yerr_monthly_corrected is not None:
+                        # Graficar con barras de error
+                        avg_error = np.mean([e for e in yerr_monthly_corrected if e > 0])
+                        logger.info(f"   📊 Agregando barras de error para SR Corregido mensual (error promedio: {avg_error:.2f}%)")
+                        # Determinar el formato correcto para errorbar
+                        if plotted_monthly_q25 and not sr_monthly_raw_q25.empty:
+                            fmt_corrected_monthly = 's-'
+                        else:
+                            fmt_corrected_monthly = 'o-'
+                        ax8.errorbar(x_ticks_positions_corrected_monthly, temp_sr_monthly_corrected.values, yerr=yerr_monthly_corrected,
+                                    fmt=fmt_corrected_monthly, label='Temperature Corrected SR (Monthly Q25)', 
+                                    color=color_corr, markersize=8, linewidth=2, capsize=4, capthick=2.0, elinewidth=2.0, ecolor=color_corr)
+                    else:
+                        # Graficar sin barras de error
+                        temp_sr_monthly_corrected.index = x_ticks_positions_corrected_monthly
+                        temp_sr_monthly_corrected.plot(ax=ax8, style=plot_style_corrected_monthly, label='Temperature Corrected SR (Monthly Q25)', color=color_corr, markersize=8)
+                        # Restaurar índices originales para calcular tendencia
+                        temp_sr_monthly_corrected.index = _series_to_plot_corrected_monthly.dropna().index
+                    
+                    # Calcular y graficar tendencia (usar índices numéricos para la tendencia)
+                    temp_sr_monthly_corrected_for_trend = temp_sr_monthly_corrected.copy()
+                    temp_sr_monthly_corrected_for_trend.index = x_ticks_positions_corrected_monthly
+                    slope, intercept, trend_values = _calculate_trend(temp_sr_monthly_corrected_for_trend)
+                    if slope is not None:
+                        trend_label = f'Corrected Trend ({slope:.2f}%/month)'
+                        ax8.plot(x_ticks_positions_corrected_monthly, trend_values, '--', color=color_corr, label=trend_label)
+                    
+                    # Guardar índices numéricos para usar en el resto del código
+                    temp_sr_monthly_corrected.index = x_ticks_positions_corrected_monthly
+                    plotted_monthly_q25 = True
+
+            if plotted_monthly_q25:
+                ax8.set_ylabel('Soiling Ratio [%]', fontsize=14)
+                ax8.set_xlabel('Date', fontsize=14)
+                ax8.grid(True)
+                ax8.set_title(f'Soiling Kit - Monthly SR (Q25)', fontsize=16)
+                ax8.legend(loc='best', frameon=True, fontsize=12)
+                ax8.set_ylim(50, 115)
+                final_tick_positions_monthly = []
+                final_tick_labels_monthly = []
+                # Priorizar etiquetas y posiciones de la serie raw si existe, sino de la corregida.
+                if x_ticks_positions_raw_monthly:
+                    final_tick_positions_monthly = x_ticks_positions_raw_monthly
+                    final_tick_labels_monthly = x_ticks_labels_raw_monthly
+                elif x_ticks_positions_corrected_monthly:
+                    final_tick_positions_monthly = x_ticks_positions_corrected_monthly
+                    final_tick_labels_monthly = x_ticks_labels_corrected_monthly
+                if final_tick_positions_monthly:
+                    # Para mensual, mostrar todas las etiquetas
+                    ax8.set_xticks(final_tick_positions_monthly)
+                    ax8.set_xticklabels(final_tick_labels_monthly, rotation=30, ha='right')
+                fig8.tight_layout()
+                save_plot_matplotlib(fig8, 'sk_sr_q25_mensual.png', paths.SOILING_KIT_OUTPUT_SUBDIR_GRAPH)
+                print("Mostrando figura 8: SR Mensual Q25 (Raw y Corregido)")
+                plt.show()
+                plt.close(fig8)
+            else:
+                logger.info("No hay datos Q25 mensuales para graficar.")
+                if 'fig8' in locals() and plt.fignum_exists(fig8.number): plt.close(fig8)
+
         # Temperaturas Módulos (Media Diaria)
-        fig8, ax8 = plt.subplots(figsize=(15, 7))
-        if not df_sk[temp_soiled_col].dropna().empty: df_sk[temp_soiled_col].resample('D').mean().plot(ax=ax8, label=f'{temp_soiled_col} (Exposed)', style='*')
-        if not df_sk[temp_ref_col].dropna().empty: df_sk[temp_ref_col].resample('D').mean().plot(ax=ax8, label=f'{temp_ref_col} (Protected)', style='*')
-        ax8.set_ylabel('Temperature [°C]', fontsize=16)
-        ax8.set_xlabel('Time', fontsize=14)
-        ax8.set_xlim(pd.Timestamp('2025-01-01', tz='UTC'), pd.Timestamp('2025-08-11 23:59:59', tz='UTC'))
-        ax8.grid(True)
-        ax8.set_title('Soiling Kit - Module Temperatures (Daily Average)', fontsize=16)
-        if ax8.has_data(): ax8.legend(fontsize=12)
-        ax8.tick_params(axis='both', labelsize=12)
+        fig9, ax9 = plt.subplots(figsize=(15, 7))
+        if not df_sk[temp_soiled_col].dropna().empty: df_sk[temp_soiled_col].resample('D').mean().plot(ax=ax9, label=f'{temp_soiled_col} (Exposed)', style='*')
+        if not df_sk[temp_ref_col].dropna().empty: df_sk[temp_ref_col].resample('D').mean().plot(ax=ax9, label=f'{temp_ref_col} (Protected)', style='*')
+        ax9.set_ylabel('Temperature [°C]', fontsize=16)
+        ax9.set_xlabel('Time', fontsize=14)
+        ax9.set_xlim(pd.Timestamp('2025-01-01', tz='UTC'), pd.Timestamp('2025-08-11 23:59:59', tz='UTC'))
+        ax9.grid(True)
+        ax9.set_title('Soiling Kit - Module Temperatures (Daily Average)', fontsize=16)
+        if ax9.has_data(): ax9.legend(fontsize=12)
+        ax9.tick_params(axis='both', labelsize=12)
         
         # Corregir el problema de etiquetas sobrepuestas en el eje X
-        ax8.xaxis.set_major_formatter(date_fmt_daily)
+        ax9.xaxis.set_major_formatter(date_fmt_daily)
         
         # Ajustar el espaciado de las etiquetas del eje X para evitar sobreposición
         # Obtener las posiciones actuales de los ticks
-        tick_positions = ax8.get_xticks()
-        tick_labels = ax8.get_xticklabels()
+        tick_positions = ax9.get_xticks()
+        tick_labels = ax9.get_xticklabels()
         
         if len(tick_positions) > 10:  # Si hay muchas etiquetas, espaciarlas
             # Mostrar solo algunas etiquetas para evitar sobreposición
@@ -492,56 +794,56 @@ def analyze_soiling_kit_data(raw_data_filepath: str) -> bool:
             
             selected_positions = [tick_positions[i] for i in indices_to_show if i < len(tick_positions)]
             selected_labels = [tick_labels[i] for i in indices_to_show if i < len(tick_labels)]
-            ax8.set_xticks(selected_positions)
-            ax8.set_xticklabels(selected_labels, rotation=45, ha='right')
+            ax9.set_xticks(selected_positions)
+            ax9.set_xticklabels(selected_labels, rotation=45, ha='right')
         else:
             # Si hay pocas etiquetas, solo rotarlas
-            ax8.tick_params(axis='x', rotation=45)
+            ax9.tick_params(axis='x', rotation=45)
         
         # Ajustar el layout para evitar cortes
-        fig8.tight_layout()
+        fig9.tight_layout()
         
-        save_plot_matplotlib(fig8, 'sk_temperaturas_modulos_daily.png', paths.SOILING_KIT_OUTPUT_SUBDIR_GRAPH)
-        print("Mostrando figura 8: Temperaturas de Módulos (Media Diaria)")
+        save_plot_matplotlib(fig9, 'sk_temperaturas_modulos_daily.png', paths.SOILING_KIT_OUTPUT_SUBDIR_GRAPH)
+        print("Mostrando figura 9: Temperaturas de Módulos (Media Diaria)")
         plt.show()
-        plt.close(fig8)
+        plt.close(fig9)
 
         # Temperaturas Módulos (Datos en Bruto)
-        fig8b, ax8b = plt.subplots(figsize=(15, 7))
+        fig9b, ax9b = plt.subplots(figsize=(15, 7))
         if not df_sk[temp_soiled_col].dropna().empty:
-            df_sk[temp_soiled_col].plot(ax=ax8b, label=f'{temp_soiled_col} (Exposed)', alpha=0.7)
+            df_sk[temp_soiled_col].plot(ax=ax9b, label=f'{temp_soiled_col} (Exposed)', alpha=0.7)
         if not df_sk[temp_ref_col].dropna().empty:
-            df_sk[temp_ref_col].plot(ax=ax8b, label=f'{temp_ref_col} (Protected)', alpha=0.7)
-        ax8b.set_ylabel('Temperature [°C]', fontsize=16)
-        ax8b.set_xlabel('Time', fontsize=14)
-        ax8b.grid(True)
-        ax8b.set_title('Soiling Kit - Module Temperatures (Raw Data)', fontsize=16)
-        if ax8b.has_data(): ax8b.legend(fontsize=12)
-        ax8b.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d %H:%M'))
-        save_plot_matplotlib(fig8b, 'sk_temperaturas_modulos_raw.png', paths.SOILING_KIT_OUTPUT_SUBDIR_GRAPH)
-        print("Mostrando figura 8b: Temperaturas de Módulos (Datos en Bruto)")
+            df_sk[temp_ref_col].plot(ax=ax9b, label=f'{temp_ref_col} (Protected)', alpha=0.7)
+        ax9b.set_ylabel('Temperature [°C]', fontsize=16)
+        ax9b.set_xlabel('Time', fontsize=14)
+        ax9b.grid(True)
+        ax9b.set_title('Soiling Kit - Module Temperatures (Raw Data)', fontsize=16)
+        if ax9b.has_data(): ax9b.legend(fontsize=12)
+        ax9b.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d %H:%M'))
+        save_plot_matplotlib(fig9b, 'sk_temperaturas_modulos_raw.png', paths.SOILING_KIT_OUTPUT_SUBDIR_GRAPH)
+        print("Mostrando figura 9b: Temperaturas de Módulos (Datos en Bruto)")
         plt.show()
-        plt.close(fig8b)
+        plt.close(fig9b)
 
         # Temperaturas Módulos (Datos en Bruto) 
         start_plot = pd.Timestamp('2025-07-01', tz='UTC')
         end_plot = pd.Timestamp('2025-08-11 23:59:59', tz='UTC')
         df_sk_plot = df_sk[(df_sk.index >= start_plot) & (df_sk.index <= end_plot)]
-        fig8c, ax8c = plt.subplots(figsize=(15, 7))
+        fig9c, ax9c = plt.subplots(figsize=(15, 7))
         if not df_sk_plot[temp_soiled_col].dropna().empty:
-            df_sk_plot[temp_soiled_col].plot(ax=ax8c, label='Te(C) (Exposed)', alpha=0.7, style='.')
+            df_sk_plot[temp_soiled_col].plot(ax=ax9c, label='Te(C) (Exposed)', alpha=0.7, style='.')
         if not df_sk_plot[temp_ref_col].dropna().empty:
-            df_sk_plot[temp_ref_col].plot(ax=ax8c, label='Tp(C) (Protected)', alpha=0.7, style='.')
-        ax8c.set_ylabel('Temperature [°C]', fontsize=16)
-        ax8c.set_xlabel('Time', fontsize=14)
-        ax8c.grid(True)
-        ax8c.set_title('Soiling Kit - Module Temperatures (Raw Data)', fontsize=16)
-        if ax8c.has_data(): ax8c.legend(fontsize=12, loc='upper left')
-        ax8c.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d %H:%M'))
-        save_plot_matplotlib(fig8c, 'sk_temperaturas_modulos_raw_abr_may_2025.png', paths.SOILING_KIT_OUTPUT_SUBDIR_GRAPH)
-        print("Mostrando figura 8c: Temperaturas de Módulos (Datos en Bruto)")
+            df_sk_plot[temp_ref_col].plot(ax=ax9c, label='Tp(C) (Protected)', alpha=0.7, style='.')
+        ax9c.set_ylabel('Temperature [°C]', fontsize=16)
+        ax9c.set_xlabel('Time', fontsize=14)
+        ax9c.grid(True)
+        ax9c.set_title('Soiling Kit - Module Temperatures (Raw Data)', fontsize=16)
+        if ax9c.has_data(): ax9c.legend(fontsize=12, loc='upper left')
+        ax9c.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d %H:%M'))
+        save_plot_matplotlib(fig9c, 'sk_temperaturas_modulos_raw_abr_may_2025.png', paths.SOILING_KIT_OUTPUT_SUBDIR_GRAPH)
+        print("Mostrando figura 9c: Temperaturas de Módulos (Datos en Bruto)")
         plt.show()
-        plt.close(fig8c)
+        plt.close(fig9c)
 
         logger.info("--- Fin Análisis de Datos de Soiling Kit (Lógica Notebook) ---")
         return True
@@ -562,12 +864,12 @@ def run_analysis():
     Función estándar para ejecutar el análisis de Soiling Kit.
     Usa la configuración centralizada para rutas y parámetros.
     """
-    raw_data_filepath = os.path.join(paths.BASE_INPUT_DIR, paths.SOILING_KIT_RAW_DATA_FILENAME)
+    raw_data_filepath = paths.SOILING_KIT_RAW_DATA_FILE
     return analyze_soiling_kit_data(raw_data_filepath)
 
 if __name__ == "__main__":
     # Solo se ejecuta cuando el archivo se ejecuta directamente
     print("Ejecutando análisis de Soiling Kit...")
     # Usar rutas centralizadas desde config/paths.py
-    raw_data_filepath = os.path.join(paths.BASE_INPUT_DIR, paths.SOILING_KIT_RAW_DATA_FILENAME)
+    raw_data_filepath = paths.SOILING_KIT_RAW_DATA_FILE
     analyze_soiling_kit_data(raw_data_filepath) 

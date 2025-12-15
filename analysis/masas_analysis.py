@@ -1,5 +1,21 @@
 import pandas as pd
 import numpy as np
+import logging
+import sys
+import os
+
+# Agregar el directorio raíz al path para imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+try:
+    from analysis.sr_uncertainty_mass import run_uncertainty_propagation_analysis
+except ImportError:
+    # Si falla el import, definir una función dummy
+    def run_uncertainty_propagation_analysis(df, output_file=None):
+        print("⚠️  No se pudo importar el módulo de propagación de errores")
+        return False
+
+logger = logging.getLogger(__name__)
 
 def calcular_diferencia(masa_soiled, masa_clean):
     """
@@ -122,6 +138,19 @@ def procesar_masas():
     
     df_resultados.to_csv(archivo_salida, index=False)
     print(f"\nResultados guardados en: {archivo_salida}")
+    
+    # Calcular propagación de errores
+    print("\n" + "=" * 60)
+    print("CALCULANDO PROPAGACIÓN DE ERRORES DE MASAS...")
+    print("=" * 60)
+    try:
+        success = run_uncertainty_propagation_analysis(df_resultados)
+        if success:
+            print("✅ Propagación de errores calculada exitosamente")
+        else:
+            print("⚠️  Hubo problemas al calcular la propagación de errores")
+    except Exception as e:
+        print(f"⚠️  Error al calcular propagación de errores: {e}")
     
     # Mostrar resumen estadístico
     print(f"\nResumen:")

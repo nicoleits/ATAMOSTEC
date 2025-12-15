@@ -104,7 +104,12 @@ def load_soiling_kit_raw_q25():
 def load_pvstand_solar_noon_corrected():
     """Cargar y procesar datos semanales Q25 de PVStand (SR_Pmax_Corrected_Raw_NoOffset y SR_Isc_Corrected_Raw_NoOffset) igual que el gráfico individual"""
     try:
+        # Intentar primero la ruta original, luego la ruta estándar
         csv_path = os.path.join(paths.BASE_OUTPUT_CSV_DIR, "pv_stand", "solar_noon", "pvstand_sr_raw_no_offset_solar_noon.csv")
+        if not os.path.exists(csv_path):
+            # Si no existe, usar la ruta estándar
+            csv_path = os.path.join(paths.BASE_OUTPUT_CSV_DIR, "pv_stand", "pvstand_sr_raw_no_offset.csv")
+        
         if os.path.exists(csv_path):
             df = pd.read_csv(csv_path)
             # Buscar columna de tiempo
@@ -1134,6 +1139,782 @@ def create_consolidated_weekly_q25_plot_oct_mar():
         return False
 
 
+def create_consolidated_weekly_q25_plot_monthly_labels():
+    """Crear gráfico consolidado que finaliza el 01/06/2025 con etiquetas Month 1, Month 2, etc."""
+    
+    logger.info("Iniciando generación de gráfico consolidado con etiquetas mensuales...")
+    
+    # Cargar todos los datos específicos
+    logger.info("=== CARGANDO DATOS ===")
+    
+    ref_cells_data = load_ref_cells_photocells()
+    logger.info(f"RefCells cargados: {not ref_cells_data.empty} - Shape: {ref_cells_data.shape if not ref_cells_data.empty else 'N/A'}")
+    
+    dustiq_data = load_dustiq_mediodia_solar()
+    logger.info(f"DustIQ cargados: {not dustiq_data.empty} - Shape: {dustiq_data.shape if not dustiq_data.empty else 'N/A'}")
+    
+    soiling_kit_data = load_soiling_kit_raw_q25()
+    logger.info(f"Soiling Kit cargados: {not soiling_kit_data.empty} - Shape: {soiling_kit_data.shape if not soiling_kit_data.empty else 'N/A'}")
+    
+    pvstand_data = load_pvstand_solar_noon_corrected()
+    logger.info(f"PVStand cargados: {not pvstand_data.empty} - Shape: {pvstand_data.shape if not pvstand_data.empty else 'N/A'}")
+    
+    iv600_data = load_iv600_both_curves()
+    logger.info(f"IV600 cargados: {not iv600_data.empty} - Shape: {iv600_data.shape if not iv600_data.empty else 'N/A'}")
+    
+    pv_glasses_data = load_pv_glasses_promedios()
+    logger.info(f"PV Glasses cargados: {not pv_glasses_data.empty} - Shape: {pv_glasses_data.shape if not pv_glasses_data.empty else 'N/A'}")
+    
+    logger.info("=== FIN CARGA DE DATOS ===")
+    
+    # Verificar si hay datos para graficar
+    if (ref_cells_data.empty and dustiq_data.empty and 
+        soiling_kit_data.empty and pvstand_data.empty and iv600_data.empty and pv_glasses_data.empty):
+        logger.warning("No se encontraron datos para graficar")
+        return False
+    
+    # Fecha de fin: 01/06/2025
+    end_date = pd.Timestamp('2025-06-01')
+    
+    # Crear figura
+    fig, ax = plt.subplots(figsize=(20, 10))
+    
+    # Colores intermedios/pastel para cada tipo de análisis
+    colors = {
+        'ref_cells': '#8B4513',      # Marrón saddle
+        'dustiq': '#FF8C00',         # Naranja oscuro
+        'soiling_kit': '#2E8B57',    # Verde mar
+        'pvstand_pmax': '#4169E1',   # Azul real
+        'pvstand_isc': '#8A2BE2',    # Azul violeta
+        'iv600_pmax': '#DC143C',     # Carmesí
+        'iv600_isc': '#FF1493',      # Rosa profundo
+        # Colores para PV glasses (tonos verdes/amarillos para diferenciarse)
+        'pv_glasses_fc3': '#228B22',  # Verde bosque
+        'pv_glasses_fc4': '#32CD32',  # Verde lima  
+        'pv_glasses_fc5': '#9ACD32'   # Verde amarillento
+    }
+    
+    plotted_series = []
+    
+    # Función para filtrar datos hasta la fecha de fin
+    def filter_to_end_date(data, data_name):
+        if data.empty:
+            return None
+        
+        # Asegurar que el índice sea tz-naive para comparaciones
+        data_copy = data.copy()
+        if data_copy.index.tz is not None:
+            data_copy.index = data_copy.index.tz_localize(None)
+        
+        filtered_data = data_copy[data_copy.index <= end_date]
+        
+        if filtered_data.empty:
+            logger.warning(f"No hay datos de {data_name} hasta {end_date}")
+            return None
+        
+        return filtered_data
+    
+    # Graficar RefCells Photocells
+    if not ref_cells_data.empty:
+        for col in ref_cells_data.columns:
+            series = ref_cells_data[col].dropna()
+            if not series.empty:
+                filtered_series = filter_to_end_date(series, f"RefCells {col}")
+                if filtered_series is not None and not filtered_series.empty:
+                    normalized_series = normalize_series_to_100(filtered_series, f"RefCells {col}")
+                    if not normalized_series.empty:
+                        ax.plot(normalized_series.index, normalized_series.values, 
+                               color=colors['ref_cells'], linewidth=2,
+                               label='RefCells - Photocells')
+                        plotted_series.append('RefCells - Photocells')
+    
+    # Graficar DustIQ Mediodía Solar
+    if not dustiq_data.empty:
+        for col in dustiq_data.columns:
+            series = dustiq_data[col].dropna()
+            if not series.empty:
+                filtered_series = filter_to_end_date(series, f"DustIQ {col}")
+                if filtered_series is not None and not filtered_series.empty:
+                    normalized_series = normalize_series_to_100(filtered_series, f"DustIQ {col}")
+                    if not normalized_series.empty:
+                        ax.plot(normalized_series.index, normalized_series.values, 
+                               color=colors['dustiq'], linewidth=2,
+                               label='DustIQ - Q25')
+                        plotted_series.append('DustIQ - Q25')
+    
+    # Graficar Soiling Kit Raw Q25 Semanal
+    if not soiling_kit_data.empty:
+        for col in soiling_kit_data.columns:
+            series = soiling_kit_data[col].dropna()
+            if not series.empty:
+                filtered_series = filter_to_end_date(series, f"Soiling Kit {col}")
+                if filtered_series is not None and not filtered_series.empty:
+                    normalized_series = normalize_series_to_100(filtered_series, f"Soiling Kit {col}")
+                    if not normalized_series.empty:
+                        ax.plot(normalized_series.index, normalized_series.values, 
+                               color=colors['soiling_kit'], linewidth=2,
+                               label='Soiling Kit')
+                        plotted_series.append('Soiling Kit')
+    
+    # Graficar PVStand Semanal Q25 (ambas curvas)
+    if not pvstand_data.empty:
+        label_map = {'SR_PVStand_Semanal_Q25_Pmax': 'PVStand Pmax',
+                     'SR_PVStand_Semanal_Q25_Isc': 'PVStand Isc'}
+        for col in pvstand_data.columns:
+            series = pvstand_data[col].dropna()
+            if not series.empty:
+                filtered_series = filter_to_end_date(series, f"PVStand {col}")
+                if filtered_series is not None and not filtered_series.empty:
+                    normalized_series = normalize_series_to_100(filtered_series, f"PVStand {col}")
+                    if not normalized_series.empty:
+                        color_key = 'pvstand_pmax' if 'Pmax' in col else 'pvstand_isc'
+                        ax.plot(normalized_series.index, normalized_series.values, 
+                               color=colors[color_key], linewidth=2,
+                               label=label_map.get(col, col))
+                        plotted_series.append(label_map.get(col, col))
+    
+    # Graficar IV600 ambas curvas
+    if not iv600_data.empty:
+        label_map = {'SR_Pmax_IV600': 'SR Pmax IV600',
+                     'SR_Isc_IV600': 'SR Isc IV600'}
+        for col in iv600_data.columns:
+            series = iv600_data[col].dropna()
+            if not series.empty:
+                filtered_series = filter_to_end_date(series, f"IV600 {col}")
+                if filtered_series is not None and not filtered_series.empty:
+                    color_key = 'iv600_pmax' if 'Pmax' in col else 'iv600_isc'
+                    ax.plot(filtered_series.index, filtered_series.values, 
+                           color=colors[color_key], linewidth=2,
+                           label=label_map.get(col, col))
+                    plotted_series.append(label_map.get(col, col))
+    
+    # Graficar PV Glasses como marcadores discretos
+    if not pv_glasses_data.empty:
+        # Asegurar que el índice sea tz-naive para comparaciones
+        pv_glasses_copy = pv_glasses_data.copy()
+        if pv_glasses_copy.index.tz is not None:
+            pv_glasses_copy.index = pv_glasses_copy.index.tz_localize(None)
+        
+        # Filtrar hasta la fecha de fin
+        pv_glasses_filtered = pv_glasses_copy[pv_glasses_copy.index <= end_date]
+        
+        # Agrupar por FC para graficar cada una por separado
+        for fc in ['FC3', 'FC4', 'FC5']:
+            fc_data = pv_glasses_filtered[pv_glasses_filtered['fc'] == fc]
+            
+            if not fc_data.empty:
+                color_key = f'pv_glasses_{fc.lower()}'
+                if color_key in colors:
+                    ax.scatter(fc_data.index, fc_data['valor'], 
+                              color=colors[color_key], s=100, marker='o',
+                              label=f'PV Glasses {fc}', zorder=5)
+                    plotted_series.append(f'PV Glasses {fc}')
+    
+    # Configurar el gráfico
+    if plotted_series:
+        ax.set_title('Intercomparison Soiling Ratio Q25 + PV Glasses', fontsize=20, fontweight='bold')
+        ax.grid(True, alpha=0.3)
+        ax.legend(loc='lower left', fontsize=15, frameon=True, fancybox=True, framealpha=0.8)
+        
+        # Ajustar límites Y para incluir todos los datos de PV glasses
+        y_min, y_max = 70, 110
+        if not pv_glasses_data.empty:
+            pv_min, pv_max = pv_glasses_data['valor'].min(), pv_glasses_data['valor'].max()
+            y_min = min(y_min, pv_min - 5)
+            y_max = max(y_max, pv_max + 5)
+            logger.info(f"Límites Y ajustados: [{y_min:.1f}, {y_max:.1f}] para incluir PV glasses [{pv_min:.1f}, {pv_max:.1f}]")
+        
+        ax.set_ylim([y_min, y_max])
+        ax.set_xlabel('Date', fontsize=18)
+        ax.set_ylabel('Soiling Ratio [%]', fontsize=18)
+        ax.tick_params(axis='both', labelsize=15)
+        
+        # Establecer límites del eje x
+        start_date_for_xlim = pd.Timestamp('2024-07-23')
+        end_date_for_xlim = end_date
+        ax.set_xlim([start_date_for_xlim, end_date_for_xlim])
+        
+        # Crear formateador personalizado para mostrar Month 1, Month 2, etc.
+        # Usar agosto 2024 como fecha de referencia (Month 1 = agosto 2024)
+        reference_date = pd.Timestamp('2024-08-01')
+        
+        # Calcular número de mes desde agosto 2024
+        def month_formatter(x, pos):
+            # Convertir el valor numérico de matplotlib a fecha
+            try:
+                date = mdates.num2date(x)
+                # Asegurar que sea tz-naive
+                if hasattr(date, 'tz') and date.tz is not None:
+                    date = date.replace(tzinfo=None)
+                
+                # Calcular diferencia en meses desde agosto 2024
+                # Usar el primer día del mes para comparación consistente
+                ref_month_start = pd.Timestamp(reference_date.year, reference_date.month, 1)
+                date_month_start = pd.Timestamp(date.year, date.month, 1)
+                
+                months_diff = (date_month_start.year - ref_month_start.year) * 12 + (date_month_start.month - ref_month_start.month) + 1
+                return f'Month {months_diff}'
+            except:
+                return ''
+        
+        # Configurar el formateador y localizador
+        ax.xaxis.set_major_formatter(plt.FuncFormatter(month_formatter))
+        ax.xaxis.set_major_locator(mdates.MonthLocator(interval=1))
+        plt.setp(ax.get_xticklabels(), rotation=45, ha='right', fontsize=15)
+        
+        # Ajustar layout
+        plt.tight_layout()
+        
+        # Guardar gráfico
+        output_dir = os.path.join(paths.BASE_OUTPUT_GRAPH_DIR, "consolidados")
+        os.makedirs(output_dir, exist_ok=True)
+        
+        plot_filename = "consolidated_weekly_q25_monthly_labels.png"
+        plot_path = os.path.join(output_dir, plot_filename)
+        
+        plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+        logger.info(f"Gráfico consolidado con etiquetas mensuales guardado en: {plot_path}")
+        
+        if settings.SHOW_FIGURES:
+            plt.show()
+        
+        plt.close()
+        return True
+    else:
+        logger.warning("No se encontraron series para graficar")
+        return False
+
+def load_uncertainty_data_weekly():
+    """Cargar datos de incertidumbre semanal para todas las metodologías"""
+    uncertainty_data = {}
+    
+    # RefCells
+    try:
+        if os.path.exists(paths.SR_WEEKLY_ABS_WITH_U_FILE):
+            df = pd.read_csv(paths.SR_WEEKLY_ABS_WITH_U_FILE)
+            time_col = 'timestamp' if 'timestamp' in df.columns else '_time'
+            if time_col in df.columns:
+                df[time_col] = pd.to_datetime(df[time_col])
+                df.set_index(time_col, inplace=True)
+                if df.index.tz is None:
+                    df.index = df.index.tz_localize('UTC')
+                uncertainty_data['ref_cells'] = df
+                logger.info(f"Datos de incertidumbre RefCells cargados: {len(df)} puntos")
+    except Exception as e:
+        logger.warning(f"Error cargando incertidumbre RefCells: {e}")
+    
+    # DustIQ
+    try:
+        if os.path.exists(paths.DUSTIQ_SR_WEEKLY_ABS_WITH_U_FILE):
+            df = pd.read_csv(paths.DUSTIQ_SR_WEEKLY_ABS_WITH_U_FILE, index_col='timestamp', parse_dates=True)
+            if df.index.tz is None:
+                df.index = df.index.tz_localize('UTC')
+            uncertainty_data['dustiq'] = df
+            logger.info(f"Datos de incertidumbre DustIQ cargados: {len(df)} puntos")
+    except Exception as e:
+        logger.warning(f"Error cargando incertidumbre DustIQ: {e}")
+    
+    # Soiling Kit
+    try:
+        if os.path.exists(paths.SOILING_KIT_SR_WEEKLY_ABS_WITH_U_FILE):
+            df = pd.read_csv(paths.SOILING_KIT_SR_WEEKLY_ABS_WITH_U_FILE)
+            # Soiling Kit usa 'Original_Timestamp_Col' como columna de tiempo
+            time_col = 'Original_Timestamp_Col' if 'Original_Timestamp_Col' in df.columns else ('timestamp' if 'timestamp' in df.columns else '_time')
+            if time_col in df.columns:
+                df[time_col] = pd.to_datetime(df[time_col])
+                df.set_index(time_col, inplace=True)
+                if df.index.tz is None:
+                    df.index = df.index.tz_localize('UTC')
+                uncertainty_data['soiling_kit'] = df
+                logger.info(f"Datos de incertidumbre Soiling Kit cargados: {len(df)} puntos")
+    except Exception as e:
+        logger.warning(f"Error cargando incertidumbre Soiling Kit: {e}", exc_info=True)
+    
+    # PVStand Isc
+    try:
+        if os.path.exists(paths.PROPAGACION_ERRORES_PVSTAND_DIR):
+            isc_file = os.path.join(paths.PROPAGACION_ERRORES_PVSTAND_DIR, "sr_isc_weekly_abs_with_U.csv")
+            if os.path.exists(isc_file):
+                df = pd.read_csv(isc_file)
+                if '_time' in df.columns:
+                    df['_time'] = pd.to_datetime(df['_time'])
+                    df.set_index('_time', inplace=True)
+                    if df.index.tz is None:
+                        df.index = df.index.tz_localize('UTC')
+                    uncertainty_data['pvstand_isc'] = df
+                    logger.info(f"Datos de incertidumbre PVStand Isc cargados: {len(df)} puntos")
+    except Exception as e:
+        logger.warning(f"Error cargando incertidumbre PVStand Isc: {e}")
+    
+    # PVStand Pmax
+    try:
+        if os.path.exists(paths.PROPAGACION_ERRORES_PVSTAND_DIR):
+            pmax_file = os.path.join(paths.PROPAGACION_ERRORES_PVSTAND_DIR, "sr_pmax_weekly_abs_with_U.csv")
+            if os.path.exists(pmax_file):
+                df = pd.read_csv(pmax_file)
+                if '_time' in df.columns:
+                    df['_time'] = pd.to_datetime(df['_time'])
+                    df.set_index('_time', inplace=True)
+                    if df.index.tz is None:
+                        df.index = df.index.tz_localize('UTC')
+                    uncertainty_data['pvstand_pmax'] = df
+                    logger.info(f"Datos de incertidumbre PVStand Pmax cargados: {len(df)} puntos")
+    except Exception as e:
+        logger.warning(f"Error cargando incertidumbre PVStand Pmax: {e}")
+    
+    # IV600 - Tiene múltiples columnas de incertidumbre, necesitamos mapear a las columnas usadas en el gráfico
+    try:
+        if os.path.exists(paths.IV600_SR_WEEKLY_ABS_WITH_U_FILE):
+            df = pd.read_csv(paths.IV600_SR_WEEKLY_ABS_WITH_U_FILE)
+            time_col = 'timestamp' if 'timestamp' in df.columns else '_time'
+            if time_col in df.columns:
+                df[time_col] = pd.to_datetime(df[time_col])
+                df.set_index(time_col, inplace=True)
+                if df.index.tz is None:
+                    df.index = df.index.tz_localize('UTC')
+                
+                # IV600 tiene múltiples comparaciones, usar la que corresponde a 434vs439
+                # Mapear a las columnas usadas en el gráfico consolidado
+                df_iv600_mapped = pd.DataFrame(index=df.index)
+                
+                # Para SR_Pmax_IV600 -> usar U_SR_Pmax_1MD434vs1MD439_k2_rel
+                if 'U_SR_Pmax_1MD434vs1MD439_k2_rel' in df.columns:
+                    df_iv600_mapped['U_rel_k2_Pmax'] = df['U_SR_Pmax_1MD434vs1MD439_k2_rel']
+                
+                # Para SR_Isc_IV600 -> usar U_SR_Isc_1MD434vs1MD439_k2_rel
+                if 'U_SR_Isc_1MD434vs1MD439_k2_rel' in df.columns:
+                    df_iv600_mapped['U_rel_k2_Isc'] = df['U_SR_Isc_1MD434vs1MD439_k2_rel']
+                
+                # Si no hay columnas específicas, intentar usar un promedio o la primera disponible
+                if df_iv600_mapped.empty:
+                    # Buscar cualquier columna U_SR_*_k2_rel
+                    u_cols = [col for col in df.columns if 'U_SR' in col and 'k2_rel' in col]
+                    if u_cols:
+                        # Usar promedio de todas las incertidumbres disponibles
+                        df_iv600_mapped['U_rel_k2'] = df[u_cols].mean(axis=1)
+                        logger.info(f"IV600: Usando promedio de {len(u_cols)} columnas de incertidumbre")
+                
+                if not df_iv600_mapped.empty:
+                    uncertainty_data['iv600'] = df_iv600_mapped
+                    logger.info(f"Datos de incertidumbre IV600 cargados: {len(df_iv600_mapped)} puntos, columnas: {df_iv600_mapped.columns.tolist()}")
+    except Exception as e:
+        logger.warning(f"Error cargando incertidumbre IV600: {e}", exc_info=True)
+    
+    # PV Glasses - Tiene 3 celdas (FC3, FC4, FC5), cada una con su propia incertidumbre
+    try:
+        if os.path.exists(paths.PV_GLASSES_SR_WEEKLY_ABS_WITH_U_FILE):
+            df = pd.read_csv(paths.PV_GLASSES_SR_WEEKLY_ABS_WITH_U_FILE)
+            time_col = '_time' if '_time' in df.columns else ('timestamp' if 'timestamp' in df.columns else 'index')
+            if time_col in df.columns:
+                df[time_col] = pd.to_datetime(df[time_col])
+                df.set_index(time_col, inplace=True)
+                if df.index.tz is None:
+                    df.index = df.index.tz_localize('UTC')
+                
+                # PV Glasses tiene columnas U_SR_R_FC3_k2_rel, U_SR_R_FC4_k2_rel, U_SR_R_FC5_k2_rel
+                # Mapear a un formato que get_error_bars_for_series pueda usar
+                df_pv_glasses_mapped = pd.DataFrame(index=df.index)
+                
+                # Mapear cada celda a su columna de incertidumbre
+                if 'U_SR_R_FC3_k2_rel' in df.columns:
+                    df_pv_glasses_mapped['U_rel_k2_FC3'] = df['U_SR_R_FC3_k2_rel']
+                if 'U_SR_R_FC4_k2_rel' in df.columns:
+                    df_pv_glasses_mapped['U_rel_k2_FC4'] = df['U_SR_R_FC4_k2_rel']
+                if 'U_SR_R_FC5_k2_rel' in df.columns:
+                    df_pv_glasses_mapped['U_rel_k2_FC5'] = df['U_SR_R_FC5_k2_rel']
+                
+                # También agregar una columna genérica U_rel_k2 como promedio (para casos donde no se especifica la celda)
+                u_cols = [col for col in df.columns if 'U_SR_R_FC' in col and 'k2_rel' in col]
+                if u_cols:
+                    df_pv_glasses_mapped['U_rel_k2'] = df[u_cols].mean(axis=1)
+                
+                if not df_pv_glasses_mapped.empty:
+                    uncertainty_data['pv_glasses'] = df_pv_glasses_mapped
+                    logger.info(f"Datos de incertidumbre PV Glasses cargados: {len(df_pv_glasses_mapped)} puntos, columnas: {df_pv_glasses_mapped.columns.tolist()}")
+    except Exception as e:
+        logger.warning(f"Error cargando incertidumbre PV Glasses: {e}", exc_info=True)
+    
+    return uncertainty_data
+
+def get_error_bars_for_series(series, uncertainty_data, data_key, col_name=None):
+    """Obtener barras de error para una serie basándose en datos de incertidumbre"""
+    if uncertainty_data is None or data_key not in uncertainty_data:
+        return None
+    
+    df_unc = uncertainty_data[data_key]
+    
+    # Determinar qué columna de incertidumbre usar
+    u_col = None
+    if 'U_rel_k2' in df_unc.columns:
+        u_col = 'U_rel_k2'
+    elif col_name and 'Pmax' in col_name and 'U_rel_k2_Pmax' in df_unc.columns:
+        u_col = 'U_rel_k2_Pmax'
+    elif col_name and 'Isc' in col_name and 'U_rel_k2_Isc' in df_unc.columns:
+        u_col = 'U_rel_k2_Isc'
+    elif col_name and 'FC3' in col_name and 'U_rel_k2_FC3' in df_unc.columns:
+        u_col = 'U_rel_k2_FC3'
+    elif col_name and 'FC4' in col_name and 'U_rel_k2_FC4' in df_unc.columns:
+        u_col = 'U_rel_k2_FC4'
+    elif col_name and 'FC5' in col_name and 'U_rel_k2_FC5' in df_unc.columns:
+        u_col = 'U_rel_k2_FC5'
+    elif 'U_rel_k2_Pmax' in df_unc.columns:
+        u_col = 'U_rel_k2_Pmax'
+    elif 'U_rel_k2_Isc' in df_unc.columns:
+        u_col = 'U_rel_k2_Isc'
+    else:
+        # Buscar cualquier columna que contenga U_rel_k2
+        u_cols = [col for col in df_unc.columns if 'U_rel_k2' in col]
+        if u_cols:
+            u_col = u_cols[0]
+            logger.info(f"Usando columna de incertidumbre: {u_col} para {data_key}")
+    
+    if u_col is None or u_col not in df_unc.columns:
+        return None
+    
+    yerr = []
+    uncertainty_index = df_unc.index
+    
+    # Asegurar timezone consistente
+    if series.index.tz is None and uncertainty_index.tz is not None:
+        series.index = series.index.tz_localize('UTC')
+    elif series.index.tz is not None and uncertainty_index.tz is None:
+        uncertainty_index = uncertainty_index.tz_localize('UTC')
+    elif series.index.tz is not None and uncertainty_index.tz is not None:
+        uncertainty_index = uncertainty_index.tz_convert(series.index.tz)
+    
+    for date in series.index:
+        sr_val = series.loc[date]
+        if pd.notna(sr_val):
+            if date in uncertainty_index:
+                u_rel = df_unc.loc[date, u_col]
+            else:
+                # Buscar fecha más cercana
+                # Para PV Glasses, usar un umbral más amplio (7 días) ya que son puntos discretos
+                # que pueden no coincidir exactamente con las fechas semanales
+                max_days = 7 if data_key == 'pv_glasses' else 3
+                time_diffs = abs(uncertainty_index - date)
+                closest_idx = time_diffs.argmin()
+                if time_diffs[closest_idx] <= pd.Timedelta(days=max_days):
+                    u_rel = df_unc.iloc[closest_idx][u_col]
+                else:
+                    u_rel = np.nan
+            
+            if pd.notna(u_rel):
+                # Determinar si u_rel está en fracción o porcentaje basándose en el data_key
+                # IV600 y PV Glasses guardan en fracción (0.0295 = 2.95%), otros en porcentaje (1.815 = 1.815%)
+                if data_key in ['iv600', 'pv_glasses']:
+                    # IV600 y PV Glasses: u_rel está en fracción, multiplicar directamente
+                    yerr.append(u_rel * sr_val)
+                else:
+                    # Otros: u_rel está en porcentaje, usar fórmula estándar
+                    # Incertidumbre absoluta = incertidumbre relativa (en %) * valor / 100
+                    yerr.append(u_rel * sr_val / 100.0)
+            else:
+                yerr.append(0)
+        else:
+            yerr.append(0)
+    
+    return yerr if any(err > 0 for err in yerr) else None
+
+def create_consolidated_weekly_q25_plot_with_uncertainty():
+    """Crear gráfico consolidado con barras de error de propagación de incertidumbre"""
+    
+    logger.info("Iniciando generación de gráfico consolidado con propagación de errores...")
+    
+    # Cargar todos los datos específicos
+    logger.info("=== CARGANDO DATOS ===")
+    
+    ref_cells_data = load_ref_cells_photocells()
+    dustiq_data = load_dustiq_mediodia_solar()
+    soiling_kit_data = load_soiling_kit_raw_q25()
+    pvstand_data = load_pvstand_solar_noon_corrected()
+    iv600_data = load_iv600_both_curves()
+    pv_glasses_data = load_pv_glasses_promedios()
+    
+    # Cargar datos de incertidumbre
+    logger.info("=== CARGANDO DATOS DE INCERTIDUMBRE ===")
+    uncertainty_data = load_uncertainty_data_weekly()
+    
+    logger.info("=== FIN CARGA DE DATOS ===")
+    
+    # Verificar si hay datos para graficar
+    if (ref_cells_data.empty and dustiq_data.empty and 
+        soiling_kit_data.empty and pvstand_data.empty and iv600_data.empty and pv_glasses_data.empty):
+        logger.warning("No se encontraron datos para graficar")
+        return False
+    
+    # Fecha de fin: 01/06/2025
+    end_date = pd.Timestamp('2025-06-01')
+    
+    # Crear figura
+    fig, ax = plt.subplots(figsize=(20, 10))
+    
+    # Colores intermedios/pastel para cada tipo de análisis
+    colors = {
+        'ref_cells': '#8B4513',      # Marrón saddle
+        'dustiq': '#FF8C00',         # Naranja oscuro
+        'soiling_kit': '#2E8B57',    # Verde mar
+        'pvstand_pmax': '#4169E1',   # Azul real
+        'pvstand_isc': '#8A2BE2',    # Azul violeta
+        'iv600_pmax': '#DC143C',     # Carmesí
+        'iv600_isc': '#FF1493',      # Rosa profundo
+        'pv_glasses_fc3': '#228B22',  # Verde bosque
+        'pv_glasses_fc4': '#32CD32',  # Verde lima  
+        'pv_glasses_fc5': '#9ACD32'   # Verde amarillento
+    }
+    
+    plotted_series = []
+    
+    # Función para filtrar datos hasta la fecha de fin
+    def filter_to_end_date(data, data_name):
+        if data.empty:
+            return None
+        data_copy = data.copy()
+        if data_copy.index.tz is not None:
+            data_copy.index = data_copy.index.tz_localize(None)
+        filtered_data = data_copy[data_copy.index <= end_date]
+        if filtered_data.empty:
+            logger.warning(f"No hay datos de {data_name} hasta {end_date}")
+            return None
+        return filtered_data
+    
+    # Graficar RefCells Photocells
+    if not ref_cells_data.empty:
+        for col in ref_cells_data.columns:
+            series = ref_cells_data[col].dropna()
+            if not series.empty:
+                filtered_series = filter_to_end_date(series, f"RefCells {col}")
+                if filtered_series is not None and not filtered_series.empty:
+                    # Calcular barras de error sobre valores originales
+                    yerr_original = get_error_bars_for_series(filtered_series, uncertainty_data, 'ref_cells')
+                    normalized_series = normalize_series_to_100(filtered_series, f"RefCells {col}")
+                    if not normalized_series.empty:
+                        # Escalar las barras de error proporcionalmente
+                        if yerr_original is not None and len(yerr_original) == len(normalized_series):
+                            first_value = filtered_series.iloc[0]
+                            normalization_factor = 100.0 / first_value if first_value != 0 else 1.0
+                            yerr = [err * normalization_factor for err in yerr_original]
+                        else:
+                            yerr = None
+                        
+                        if yerr is not None:
+                            ax.errorbar(normalized_series.index, normalized_series.values, yerr=yerr,
+                                       color=colors['ref_cells'], linewidth=2, capsize=3, capthick=1.5,
+                                       elinewidth=1.5, ecolor=colors['ref_cells'], alpha=0.8,
+                                       label='RefCells - Photocells')
+                        else:
+                            ax.plot(normalized_series.index, normalized_series.values, 
+                                   color=colors['ref_cells'], linewidth=2,
+                                   label='RefCells - Photocells')
+                        plotted_series.append('RefCells - Photocells')
+    
+    # Graficar DustIQ Mediodía Solar
+    if not dustiq_data.empty:
+        for col in dustiq_data.columns:
+            series = dustiq_data[col].dropna()
+            if not series.empty:
+                filtered_series = filter_to_end_date(series, f"DustIQ {col}")
+                if filtered_series is not None and not filtered_series.empty:
+                    # Calcular barras de error sobre valores originales
+                    yerr_original = get_error_bars_for_series(filtered_series, uncertainty_data, 'dustiq')
+                    normalized_series = normalize_series_to_100(filtered_series, f"DustIQ {col}")
+                    if not normalized_series.empty:
+                        # Escalar las barras de error proporcionalmente
+                        if yerr_original is not None and len(yerr_original) == len(normalized_series):
+                            first_value = filtered_series.iloc[0]
+                            normalization_factor = 100.0 / first_value if first_value != 0 else 1.0
+                            yerr = [err * normalization_factor for err in yerr_original]
+                        else:
+                            yerr = None
+                        
+                        if yerr is not None:
+                            ax.errorbar(normalized_series.index, normalized_series.values, yerr=yerr,
+                                       color=colors['dustiq'], linewidth=2, capsize=3, capthick=1.5,
+                                       elinewidth=1.5, ecolor=colors['dustiq'], alpha=0.8,
+                                       label='DustIQ - Q25')
+                        else:
+                            ax.plot(normalized_series.index, normalized_series.values, 
+                                   color=colors['dustiq'], linewidth=2,
+                                   label='DustIQ - Q25')
+                        plotted_series.append('DustIQ - Q25')
+    
+    # Graficar Soiling Kit Raw Q25 Semanal
+    if not soiling_kit_data.empty:
+        for col in soiling_kit_data.columns:
+            series = soiling_kit_data[col].dropna()
+            if not series.empty:
+                filtered_series = filter_to_end_date(series, f"Soiling Kit {col}")
+                if filtered_series is not None and not filtered_series.empty:
+                    # Calcular barras de error sobre valores originales (antes de normalizar)
+                    yerr_original = get_error_bars_for_series(filtered_series, uncertainty_data, 'soiling_kit')
+                    normalized_series = normalize_series_to_100(filtered_series, f"Soiling Kit {col}")
+                    if not normalized_series.empty:
+                        # Escalar las barras de error proporcionalmente a la normalización
+                        if yerr_original is not None and len(yerr_original) == len(normalized_series):
+                            first_value = filtered_series.iloc[0]
+                            normalization_factor = 100.0 / first_value if first_value != 0 else 1.0
+                            yerr = [err * normalization_factor for err in yerr_original]
+                        else:
+                            yerr = None
+                        
+                        if yerr is not None:
+                            ax.errorbar(normalized_series.index, normalized_series.values, yerr=yerr,
+                                       color=colors['soiling_kit'], linewidth=2, capsize=3, capthick=1.5,
+                                       elinewidth=1.5, ecolor=colors['soiling_kit'], alpha=0.8,
+                                       label='Soiling Kit')
+                        else:
+                            ax.plot(normalized_series.index, normalized_series.values, 
+                                   color=colors['soiling_kit'], linewidth=2,
+                                   label='Soiling Kit')
+                        plotted_series.append('Soiling Kit')
+    
+    # Graficar PVStand Semanal Q25 (ambas curvas)
+    if not pvstand_data.empty:
+        label_map = {'SR_PVStand_Semanal_Q25_Pmax': 'PVStand Pmax',
+                     'SR_PVStand_Semanal_Q25_Isc': 'PVStand Isc'}
+        for col in pvstand_data.columns:
+            series = pvstand_data[col].dropna()
+            if not series.empty:
+                filtered_series = filter_to_end_date(series, f"PVStand {col}")
+                if filtered_series is not None and not filtered_series.empty:
+                    color_key = 'pvstand_pmax' if 'Pmax' in col else 'pvstand_isc'
+                    uncertainty_key = 'pvstand_pmax' if 'Pmax' in col else 'pvstand_isc'
+                    # Calcular barras de error sobre valores originales
+                    yerr_original = get_error_bars_for_series(filtered_series, uncertainty_data, uncertainty_key)
+                    normalized_series = normalize_series_to_100(filtered_series, f"PVStand {col}")
+                    if not normalized_series.empty:
+                        # Escalar las barras de error proporcionalmente
+                        if yerr_original is not None and len(yerr_original) == len(normalized_series):
+                            first_value = filtered_series.iloc[0]
+                            normalization_factor = 100.0 / first_value if first_value != 0 else 1.0
+                            yerr = [err * normalization_factor for err in yerr_original]
+                        else:
+                            yerr = None
+                        
+                        if yerr is not None:
+                            ax.errorbar(normalized_series.index, normalized_series.values, yerr=yerr,
+                                       color=colors[color_key], linewidth=2, capsize=3, capthick=1.5,
+                                       elinewidth=1.5, ecolor=colors[color_key], alpha=0.8,
+                                       label=label_map.get(col, col))
+                        else:
+                            ax.plot(normalized_series.index, normalized_series.values, 
+                                   color=colors[color_key], linewidth=2,
+                                   label=label_map.get(col, col))
+                        plotted_series.append(label_map.get(col, col))
+    
+    # Graficar IV600 ambas curvas
+    if not iv600_data.empty:
+        label_map = {'SR_Pmax_IV600': 'SR Pmax IV600',
+                     'SR_Isc_IV600': 'SR Isc IV600'}
+        for col in iv600_data.columns:
+            series = iv600_data[col].dropna()
+            if not series.empty:
+                filtered_series = filter_to_end_date(series, f"IV600 {col}")
+                if filtered_series is not None and not filtered_series.empty:
+                    color_key = 'iv600_pmax' if 'Pmax' in col else 'iv600_isc'
+                    # IV600 no se normaliza en el gráfico consolidado, calcular barras de error directamente
+                    yerr = get_error_bars_for_series(filtered_series, uncertainty_data, 'iv600', col_name=col)
+                    if yerr is not None:
+                        ax.errorbar(filtered_series.index, filtered_series.values, yerr=yerr,
+                                   color=colors[color_key], linewidth=2, capsize=3, capthick=1.5,
+                                   elinewidth=1.5, ecolor=colors[color_key], alpha=0.8,
+                                   label=label_map.get(col, col))
+                    else:
+                        ax.plot(filtered_series.index, filtered_series.values, 
+                               color=colors[color_key], linewidth=2,
+                               label=label_map.get(col, col))
+                    plotted_series.append(label_map.get(col, col))
+    
+    # Graficar PV Glasses como marcadores discretos con barras de error
+    if not pv_glasses_data.empty:
+        pv_glasses_copy = pv_glasses_data.copy()
+        if pv_glasses_copy.index.tz is not None:
+            pv_glasses_copy.index = pv_glasses_copy.index.tz_localize(None)
+        pv_glasses_filtered = pv_glasses_copy[pv_glasses_copy.index <= end_date]
+        for fc in ['FC3', 'FC4', 'FC5']:
+            fc_data = pv_glasses_filtered[pv_glasses_filtered['fc'] == fc]
+            if not fc_data.empty:
+                color_key = f'pv_glasses_{fc.lower()}'
+                if color_key in colors:
+                    # Crear Series para obtener barras de error
+                    fc_series = pd.Series(fc_data['valor'].values, index=fc_data.index)
+                    
+                    # Obtener barras de error usando col_name para especificar la celda
+                    yerr_fc = get_error_bars_for_series(
+                        fc_series, 
+                        uncertainty_data, 
+                        'pv_glasses', 
+                        col_name=fc  # 'FC3', 'FC4', 'FC5'
+                    )
+                    
+                    # Graficar con barras de error si están disponibles
+                    if yerr_fc is not None:
+                        ax.errorbar(fc_data.index, fc_data['valor'], 
+                                   yerr=yerr_fc,
+                                   color=colors[color_key], 
+                                   fmt='o', markersize=8, capsize=3, capthick=1.5,
+                                   label=f'PV Glasses {fc}', zorder=5, alpha=0.8)
+                    else:
+                        # Si no hay barras de error, graficar sin ellas
+                        ax.scatter(fc_data.index, fc_data['valor'], 
+                                  color=colors[color_key], s=100, marker='o',
+                                  label=f'PV Glasses {fc}', zorder=5)
+                    plotted_series.append(f'PV Glasses {fc}')
+    
+    # Configurar el gráfico
+    if plotted_series:
+        ax.set_title('Intercomparison Soiling Ratio Q25 + PV Glasses (with Uncertainty)', fontsize=20, fontweight='bold')
+        ax.grid(True, alpha=0.3)
+        ax.legend(loc='lower left', fontsize=15, frameon=True, fancybox=True, framealpha=0.8)
+        
+        # Establecer límites fijos del eje Y
+        ax.set_ylim([50, 110])
+        ax.set_xlabel('Date', fontsize=18)
+        ax.set_ylabel('Soiling Ratio [%]', fontsize=18)
+        ax.tick_params(axis='both', labelsize=15)
+        
+        start_date_for_xlim = pd.Timestamp('2024-07-23')
+        end_date_for_xlim = end_date
+        ax.set_xlim([start_date_for_xlim, end_date_for_xlim])
+        
+        # Formateador de meses (Month 1 = agosto 2024)
+        reference_date = pd.Timestamp('2024-08-01')
+        def month_formatter(x, pos):
+            try:
+                date = mdates.num2date(x)
+                if hasattr(date, 'tz') and date.tz is not None:
+                    date = date.replace(tzinfo=None)
+                ref_month_start = pd.Timestamp(reference_date.year, reference_date.month, 1)
+                date_month_start = pd.Timestamp(date.year, date.month, 1)
+                months_diff = (date_month_start.year - ref_month_start.year) * 12 + (date_month_start.month - ref_month_start.month) + 1
+                return f'Month {months_diff}'
+            except:
+                return ''
+        
+        ax.xaxis.set_major_formatter(plt.FuncFormatter(month_formatter))
+        ax.xaxis.set_major_locator(mdates.MonthLocator(interval=1))
+        plt.setp(ax.get_xticklabels(), rotation=45, ha='right', fontsize=15)
+        
+        plt.tight_layout()
+        
+        output_dir = os.path.join(paths.BASE_OUTPUT_GRAPH_DIR, "consolidados")
+        os.makedirs(output_dir, exist_ok=True)
+        
+        plot_filename = "consolidated_weekly_q25_with_uncertainty.png"
+        plot_path = os.path.join(output_dir, plot_filename)
+        
+        plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+        logger.info(f"Gráfico consolidado con incertidumbre guardado en: {plot_path}")
+        
+        if settings.SHOW_FIGURES:
+            plt.show()
+        
+        plt.close()
+        return True
+    else:
+        logger.warning("No se encontraron series para graficar")
+        return False
+
 def main():
     """Función principal"""
     try:
@@ -1150,6 +1931,20 @@ def main():
             print("✅ Gráfico consolidado con PV Glasses generado exitosamente")
         else:
             print("❌ No se pudo generar el gráfico consolidado con PV Glasses")
+        
+        # Ejecutar nueva función con etiquetas mensuales
+        success4 = create_consolidated_weekly_q25_plot_monthly_labels()
+        if success4:
+            print("✅ Gráfico consolidado con etiquetas mensuales generado exitosamente")
+        else:
+            print("❌ No se pudo generar el gráfico consolidado con etiquetas mensuales")
+        
+        # Ejecutar nueva función con propagación de errores
+        success5 = create_consolidated_weekly_q25_plot_with_uncertainty()
+        if success5:
+            print("✅ Gráfico consolidado con propagación de errores generado exitosamente")
+        else:
+            print("❌ No se pudo generar el gráfico consolidado con propagación de errores")
             
     except Exception as e:
         logger.error(f"Error en la generación de los gráficos consolidados: {e}")

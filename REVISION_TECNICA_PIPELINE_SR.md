@@ -313,3 +313,8 @@ El sistema de análisis de soiling implementado en este repositorio procesa dato
 
 
 
+
+
+
+
+

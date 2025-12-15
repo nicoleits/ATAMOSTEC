@@ -503,8 +503,8 @@ def run_uncertainty_propagation_analysis_iv600(
         
         # Usar valores por defecto si no se proporcionan
         if input_file is None:
-            # Intentar encontrar el archivo de datos IV600
-            input_file = os.path.join(paths.BASE_INPUT_DIR, 'raw_iv600_data.csv')
+            # Usar la ruta definida en config.paths
+            input_file = paths.IV600_RAW_DATA_FILE
         
         if output_dir is None:
             output_dir = paths.PROPAGACION_ERRORES_IV600_DIR
@@ -523,16 +523,78 @@ def run_uncertainty_propagation_analysis_iv600(
         # Cargar datos
         logger.info("Cargando datos de IV600...")
         try:
-            # Leer datos IV600 (formato específico con MultiIndex)
-            df_iv600 = pd.read_csv(input_file, index_col='timestamp', parse_dates=True)
+            # Leer datos IV600 raw
+            df_iv600_raw = pd.read_csv(input_file, index_col='timestamp', parse_dates=True)
+            logger.info(f"Datos raw cargados: {len(df_iv600_raw)} filas, {len(df_iv600_raw.columns)} columnas")
             
-            # Verificar si necesita procesamiento adicional para crear MultiIndex
-            # Esto depende del formato específico del archivo
-            logger.info(f"Datos cargados: {len(df_iv600)} filas, {len(df_iv600.columns)} columnas")
-            logger.info(f"Columnas disponibles: {df_iv600.columns.tolist()}")
+            # Procesar timezone si es necesario
+            if df_iv600_raw.index.tz is not None:
+                logger.info(f"Convirtiendo timezone de {df_iv600_raw.index.tz} a naive")
+                df_iv600_raw.index = df_iv600_raw.index.tz_convert(None)
+            
+            # Mapeo de columnas
+            column_mapping = {
+                'module': 'Module',
+                'pmp': 'Pmax',
+                'isc': 'Isc',
+                'voc': 'Voc',
+                'imp': 'Imp',
+                'vmp': 'Vmp'
+            }
+            
+            df_iv600_processed = df_iv600_raw.rename(columns=column_mapping)
+            logger.info(f"Columnas después del mapeo: {df_iv600_processed.columns.tolist()}")
+            
+            # Crear MultiIndex con (módulo, parámetro) - igual que en analisis_iv600_fixed.py
+            modules_of_interest = ['1MD434', '1MD439', '1MD440']
+            valid_modules = [mod for mod in modules_of_interest if mod in df_iv600_processed['Module'].unique()]
+            
+            if not valid_modules:
+                logger.error(f"No se encontraron módulos válidos. Módulos disponibles: {df_iv600_processed['Module'].unique()}")
+                return False
+            
+            logger.info(f"Módulos válidos encontrados: {valid_modules}")
+            
+            # Crear DataFrames de 5 minutos por módulo y concatenar con MultiIndex
+            pmax_module_dfs = []
+            isc_module_dfs = []
+            valid_module_keys = []
+            
+            for mod_name in valid_modules:
+                df_mod = df_iv600_processed[df_iv600_processed['Module'] == mod_name]
+                if not df_mod.empty:
+                    # Resample a 5 minutos
+                    df_mod_resampled = df_mod[['Pmax', 'Isc']].resample('5min').mean()
+                    
+                    if not df_mod_resampled.empty:
+                        pmax_module_dfs.append(df_mod_resampled[['Pmax']])
+                        isc_module_dfs.append(df_mod_resampled[['Isc']])
+                        valid_module_keys.append(mod_name)
+            
+            if not pmax_module_dfs or not isc_module_dfs:
+                logger.error("No se pudieron crear DataFrames por módulo")
+                return False
+            
+            # Concatenar todos los módulos para crear MultiIndex (igual que en analisis_iv600_fixed.py)
+            df_pmax_5T = pd.concat(pmax_module_dfs, keys=valid_module_keys, axis=1)
+            df_isc_5T = pd.concat(isc_module_dfs, keys=valid_module_keys, axis=1)
+            
+            # El pd.concat con keys crea MultiIndex (módulo, 'Pmax') o (módulo, 'Isc')
+            # Necesitamos cambiar el segundo nivel para que sea 'Pmax' o 'Isc'
+            new_pmax_cols = pd.MultiIndex.from_tuples([(mod, 'Pmax') for mod in valid_module_keys])
+            new_isc_cols = pd.MultiIndex.from_tuples([(mod, 'Isc') for mod in valid_module_keys])
+            
+            df_pmax_5T.columns = new_pmax_cols
+            df_isc_5T.columns = new_isc_cols
+            
+            # Combinar ambos DataFrames
+            df_iv600 = pd.concat([df_pmax_5T, df_isc_5T], axis=1)
+            
+            logger.info(f"DataFrame con MultiIndex creado: {len(df_iv600)} filas, {len(df_iv600.columns)} columnas")
+            logger.info(f"Columnas MultiIndex: {df_iv600.columns.tolist()[:6]}...")  # Mostrar primeras 6
             
         except Exception as e:
-            logger.error(f"Error al cargar datos: {e}")
+            logger.error(f"Error al cargar y procesar datos: {e}", exc_info=True)
             return False
         
         # Procesar incertidumbre minuto a minuto

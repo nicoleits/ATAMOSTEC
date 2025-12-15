@@ -347,6 +347,9 @@ def process_campaign_uncertainty(
     try:
         logger.info(f"Procesando incertidumbre de campaña minuto a minuto (PVStand - {sr_type})...")
         
+        # Log de columnas disponibles
+        logger.info(f"Columnas disponibles en DataFrame: {df_pvstand.columns.tolist()}")
+        
         # Identificar columnas según sr_type
         if sr_type == 'Isc':
             col_soiled = settings.PVSTAND_ISC_COLUMN  # Necesita estar en settings
@@ -357,6 +360,24 @@ def process_campaign_uncertainty(
         
         temp_soiled_col = settings.PVSTAND_TEMP_SENSOR_SOILED_COL
         temp_ref_col = settings.PVSTAND_TEMP_SENSOR_REFERENCE_COL
+        
+        logger.info(f"Buscando columnas: col_soiled='{col_soiled}', col_ref='{col_ref}', temp_soiled='{temp_soiled_col}', temp_ref='{temp_ref_col}'")
+        
+        # Verificar que las columnas existen
+        missing_cols = []
+        if col_soiled not in df_pvstand.columns:
+            missing_cols.append(col_soiled)
+        if col_ref not in df_pvstand.columns:
+            missing_cols.append(col_ref)
+        if temp_soiled_col not in df_pvstand.columns:
+            missing_cols.append(temp_soiled_col)
+        if temp_ref_col not in df_pvstand.columns:
+            missing_cols.append(temp_ref_col)
+        
+        if missing_cols:
+            logger.error(f"Columnas faltantes en DataFrame: {missing_cols}")
+            logger.error(f"Columnas disponibles: {df_pvstand.columns.tolist()}")
+            return None
         
         # Extraer series
         if sr_type == 'Isc':
@@ -578,7 +599,7 @@ def run_uncertainty_propagation_analysis(
             df_sr_uncertainty_utc.index = df_sr_uncertainty_utc.index.tz_convert('UTC')
         
         # Agregaciones diarias, semanales y mensuales
-        for freq, suffix in [('D', 'daily'), ('W-SUN', 'weekly'), ('M', 'monthly')]:
+        for freq, suffix in [('D', 'daily'), ('W-SUN', 'weekly'), ('ME', 'monthly')]:
             df_agg = aggregate_with_uncertainty(
                 sr_series, U_campaign_k2_rel, freq=freq, quantile=0.25,
                 df_sr_uncertainty=df_sr_uncertainty_utc

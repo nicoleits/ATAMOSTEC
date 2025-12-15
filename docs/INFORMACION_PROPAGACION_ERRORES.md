@@ -464,3 +464,10 @@ Incertidumbre expandida (k=2):
 **⚠️ IMPORTANTE**: El código automáticamente convierte a k=1 dividiendo por 2.0, no necesitas hacerlo manualmente.
 
 
+
+
+
+
+
+
+

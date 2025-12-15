@@ -29,6 +29,7 @@ from data_processing.data_preprocessor import run_preprocessing
 from analysis.soiling_kit_analyzer import run_analysis as run_soiling_kit
 from analysis.dustiq_analyzer import run_analysis as run_dustiq
 from analysis.ref_cells_analyzer import run_analysis as run_ref_cells
+from analysis.ref_cells_analyzer import run_analysis_solar_noon as run_ref_cells_solar_noon
 from analysis.pvstand_analyzer import run_analysis as run_pvstand
 from analysis.pvstand_analyzer_solar_noon import run_analysis_solar_noon as run_pvstand_solar_noon
 from analysis.pv_glasses_analyzer import run_analysis as run_pv_glasses
@@ -53,6 +54,7 @@ ANALYSIS_OPTIONS = {
     1: ("Soiling Kit", run_soiling_kit),
     2: ("DustIQ", run_dustiq),
     3: ("Celdas de Referencia", run_ref_cells),
+    16: ("Celdas de Referencia - Mediodía Solar", run_ref_cells_solar_noon),
     4: ("PVStand", run_pvstand),
     5: ("PVStand - Mediodía Solar", run_pvstand_solar_noon),
     6: ("PV Glasses", run_pv_glasses),

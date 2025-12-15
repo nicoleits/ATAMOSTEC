@@ -1,4 +1,5 @@
 import os
+import sys
 import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
@@ -7,7 +8,18 @@ import numpy as np
 from scipy import stats
 import matplotlib.dates as mdates
 import itertools
-from .classes_codes import medio_dia_solar
+
+# Manejar importación de classes_codes tanto cuando se ejecuta directamente como módulo
+try:
+    from .classes_codes import medio_dia_solar
+except ImportError:
+    # Si falla la importación relativa, intentar importación absoluta
+    # Añadir el directorio 'analysis' al PYTHONPATH si no está
+    analysis_dir = os.path.dirname(os.path.abspath(__file__))
+    if analysis_dir not in sys.path:
+        sys.path.insert(0, analysis_dir)
+    from classes_codes import medio_dia_solar
+
 from config import paths
 from config.settings import (
     ANALYSIS_START_DATE_GENERAL_STR,

@@ -14,6 +14,7 @@ import logging
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.plot_utils import save_plot
+from config import paths
 
 def run_analysis():
     # Crear carpeta de salida para los gráficos
@@ -23,7 +24,13 @@ def run_analysis():
     print("--- Iniciando Análisis de Soiling con datos IV600 desde CSV (VERSIÓN FILTRADA) ---")
     
     # 1. Cargar el archivo raw_iv600_data.csv (como en el notebook original)
-    iv600_csv_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'datos', 'raw_iv600_data.csv')
+    # Usar la ruta desde config.paths si está disponible, sino construirla
+    try:
+        from config import paths
+        iv600_csv_path = paths.IV600_RAW_DATA_FILE
+    except (ImportError, AttributeError):
+        # Fallback: construir la ruta manualmente incluyendo la carpeta iv600
+        iv600_csv_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'datos', 'iv600', 'raw_iv600_data.csv')
     
     try:
         df_iv600_raw = pd.read_csv(
@@ -372,6 +379,134 @@ def run_analysis():
     print(f"SR Pmp semanal: {sr_pmp_iv600_weekly.shape}")
     print(f"SR Isc semanal: {sr_isc_iv600_weekly.shape}")
 
+    # Cargar datos de incertidumbre para agregar barras de error a los gráficos
+    uncertainty_data_daily = None
+    uncertainty_data_weekly = None
+    
+    try:
+        if os.path.exists(paths.IV600_SR_DAILY_ABS_WITH_U_FILE):
+            # Leer CSV con timestamp como índice
+            uncertainty_data_daily = pd.read_csv(paths.IV600_SR_DAILY_ABS_WITH_U_FILE, index_col=0, parse_dates=True)
+            # Asegurar que el índice se llama 'timestamp' o normalizarlo
+            if uncertainty_data_daily.index.name and 'timestamp' not in str(uncertainty_data_daily.index.name).lower():
+                uncertainty_data_daily.index.name = None
+            print(f"✅ Datos de incertidumbre diarios cargados: {len(uncertainty_data_daily)} puntos")
+            print(f"   Columnas disponibles (primeras 5): {list(uncertainty_data_daily.columns[:5])}")
+            print(f"   Rango de fechas: {uncertainty_data_daily.index.min()} a {uncertainty_data_daily.index.max()}")
+        else:
+            print(f"⚠️  Archivo de incertidumbre diario no encontrado en: {paths.IV600_SR_DAILY_ABS_WITH_U_FILE}")
+            print("   Los gráficos se generarán sin barras de error.")
+    except Exception as e:
+        print(f"⚠️  Error al cargar datos de incertidumbre diarios: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    try:
+        if os.path.exists(paths.IV600_SR_WEEKLY_ABS_WITH_U_FILE):
+            # Leer CSV con timestamp como índice
+            uncertainty_data_weekly = pd.read_csv(paths.IV600_SR_WEEKLY_ABS_WITH_U_FILE, index_col=0, parse_dates=True)
+            # Asegurar que el índice se llama 'timestamp' o normalizarlo
+            if uncertainty_data_weekly.index.name and 'timestamp' not in str(uncertainty_data_weekly.index.name).lower():
+                uncertainty_data_weekly.index.name = None
+            print(f"✅ Datos de incertidumbre semanales cargados: {len(uncertainty_data_weekly)} puntos")
+            print(f"   Columnas disponibles (primeras 5): {list(uncertainty_data_weekly.columns[:5])}")
+            print(f"   Rango de fechas: {uncertainty_data_weekly.index.min()} a {uncertainty_data_weekly.index.max()}")
+        else:
+            print(f"⚠️  Archivo de incertidumbre semanal no encontrado en: {paths.IV600_SR_WEEKLY_ABS_WITH_U_FILE}")
+            print("   Los gráficos semanales se generarán sin barras de error.")
+    except Exception as e:
+        print(f"⚠️  Error al cargar datos de incertidumbre semanales: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    # Función auxiliar para obtener barras de error de incertidumbre
+    def get_error_bars(sr_series, uncertainty_data, sr_col_name):
+        """
+        Obtiene las barras de error (yerr) para una serie de SR usando datos de incertidumbre.
+        
+        Args:
+            sr_series: Serie de pandas con valores de SR
+            uncertainty_data: DataFrame con datos de incertidumbre (debe tener índice de fechas)
+            sr_col_name: Nombre de la columna de SR (ej: 'SR_Pmp_434vs439')
+        
+        Returns:
+            Lista de valores de error (yerr) para usar con errorbar()
+        """
+        if uncertainty_data is None:
+            return None
+        
+        # Mapeo de nombres de columnas del análisis a los nombres en archivos de incertidumbre
+        # Los archivos de incertidumbre usan formato: SR_Pmax_1MD434vs1MD439
+        # Los gráficos usan formato: SR_Pmp_434vs439
+        uncertainty_col_map = {
+            'SR_Pmp_434vs439': 'SR_Pmax_1MD434vs1MD439',
+            'SR_Pmp_440vs439': 'SR_Pmax_1MD440vs1MD439',
+            'SR_Isc_434vs439': 'SR_Isc_1MD434vs1MD439',
+            'SR_Isc_440vs439': 'SR_Isc_1MD440vs1MD439',
+        }
+        
+        # Buscar el nombre correcto de la columna de incertidumbre
+        uncertainty_sr_col = uncertainty_col_map.get(sr_col_name, sr_col_name)
+        
+        # Construir nombre de columna de incertidumbre relativa k=2
+        u_rel_col = f'U_{uncertainty_sr_col}_k2_rel'
+        
+        # Verificar que la columna existe
+        if u_rel_col not in uncertainty_data.columns:
+            # Intentar alternativas de nomenclatura
+            # Primero probar con formato corto (sin 1MD)
+            uncertainty_sr_col_short = sr_col_name.replace('SR_Pmp_', 'SR_Pmax_')
+            u_rel_col_alt1 = f'U_{uncertainty_sr_col_short}_k2_rel'
+            if u_rel_col_alt1 in uncertainty_data.columns:
+                u_rel_col = u_rel_col_alt1
+            else:
+                # Intentar con el nombre original
+                u_rel_col_alt2 = f'U_{sr_col_name}_k2_rel'
+                if u_rel_col_alt2 in uncertainty_data.columns:
+                    u_rel_col = u_rel_col_alt2
+                else:
+                    # Si no encontramos la columna, retornar None (sin mensajes para evitar spam)
+                    return None
+        
+        # Debug: confirmar que encontramos la columna (solo una vez por tipo)
+        if not hasattr(get_error_bars, '_debug_printed'):
+            get_error_bars._debug_printed = set()
+        
+        if u_rel_col not in get_error_bars._debug_printed:
+            print(f"   ✅ Columna de incertidumbre encontrada: '{u_rel_col}' para '{sr_col_name}'")
+            get_error_bars._debug_printed.add(u_rel_col)
+        
+        yerr = []
+        uncertainty_index = uncertainty_data.index
+        
+        for date in sr_series.index:
+            sr_val = sr_series.loc[date]
+            if pd.notna(sr_val):
+                # Buscar fecha exacta o más cercana
+                if date in uncertainty_index:
+                    u_rel = uncertainty_data.loc[date, u_rel_col]
+                else:
+                    # Encontrar la fecha más cercana (dentro de 1 día para diario, 3 días para semanal)
+                    time_diffs = abs(uncertainty_index - date)
+                    closest_idx = time_diffs.argmin()
+                    max_tolerance = pd.Timedelta(days=3)
+                    if time_diffs[closest_idx] <= max_tolerance:
+                        u_rel = uncertainty_data.iloc[closest_idx][u_rel_col]
+                    else:
+                        u_rel = np.nan
+                
+                if pd.notna(u_rel):
+                    # Incertidumbre absoluta = incertidumbre relativa * valor
+                    # u_rel está en formato decimal (ej: 0.0277 = 2.77%)
+                    # Multiplicar directamente por el valor SR para obtener error absoluto
+                    yerr.append(u_rel * sr_val)
+                else:
+                    yerr.append(0)
+            else:
+                yerr.append(0)
+        
+        return yerr if any(err > 0 for err in yerr) else None
+
     # 9. GRÁFICOS - SIGUIENDO LA LÓGICA EXACTA DE LOS GRÁFICOS SIN PICOS
     
     # 9.1 Gráfico SR Pmp diario (FILTRADO)
@@ -382,8 +517,23 @@ def run_analysis():
         for idx, col in enumerate(sr_pmp_iv600.columns):
             if not sr_pmp_iv600[col].dropna().empty:
                 color = colors[idx % len(colors)]
-                sr_pmp_iv600[col].plot(ax=ax1, style='--o', alpha=0.75, label=col, 
-                                      markersize=4, color=color)
+                serie = sr_pmp_iv600[col].dropna()
+                
+                # Intentar obtener barras de error
+                yerr = get_error_bars(serie, uncertainty_data_daily, col)
+                
+                if yerr is not None:
+                    # Graficar con barras de error
+                    avg_error = np.mean([e for e in yerr if e > 0])
+                    print(f"   📊 Agregando barras de error para {col} (error promedio: {avg_error:.2f}%)")
+                    ax1.errorbar(serie.index, serie.values, yerr=yerr, fmt='--o', 
+                                alpha=0.75, label=col, markersize=4, color=color,
+                                capsize=4, capthick=2.0, elinewidth=2.0, ecolor=color)
+                else:
+                    # Graficar sin barras de error
+                    print(f"   ⚠️  No se encontraron barras de error para {col}")
+                    serie.plot(ax=ax1, style='--o', alpha=0.75, label=col, 
+                              markersize=4, color=color)
                 plot_legend1.append(col)
         
         if plot_legend1:
@@ -392,7 +542,7 @@ def run_analysis():
             ax1.set_xlabel('Date', fontsize=16)
             ax1.grid(True)
             ax1.set_title('Pmp Soiling Ratios - IV600 (Filtered 93-101%)', fontsize=20)
-            ax1.set_ylim(90, 110)
+            ax1.set_ylim(50, 110)
             ax1.tick_params(axis='both', labelsize=16)
             plt.xticks(rotation=30, ha='right', fontsize=16)
             plt.yticks(fontsize=16)
@@ -409,8 +559,22 @@ def run_analysis():
         for idx, col in enumerate(sr_isc_iv600.columns):
             if not sr_isc_iv600[col].dropna().empty:
                 color = colors[idx % len(colors)]
-                sr_isc_iv600[col].plot(ax=ax2, style='--o', alpha=0.75, label=col, 
-                                      markersize=4, color=color)
+                serie = sr_isc_iv600[col].dropna()
+                
+                # Intentar obtener barras de error
+                yerr = get_error_bars(serie, uncertainty_data_daily, col)
+                
+                if yerr is not None:
+                    # Graficar con barras de error
+                    avg_error = np.mean([e for e in yerr if e > 0])
+                    print(f"   📊 Agregando barras de error para {col} (error promedio: {avg_error:.2f}%)")
+                    ax2.errorbar(serie.index, serie.values, yerr=yerr, fmt='--o', 
+                                alpha=0.75, label=col, markersize=4, color=color,
+                                capsize=4, capthick=2.0, elinewidth=2.0, ecolor=color)
+                else:
+                    # Graficar sin barras de error
+                    serie.plot(ax=ax2, style='--o', alpha=0.75, label=col, 
+                              markersize=4, color=color)
                 plot_legend2.append(col)
         
         if plot_legend2:
@@ -419,7 +583,7 @@ def run_analysis():
             ax2.set_xlabel('Date', fontsize=16)
             ax2.grid(True)
             ax2.set_title('Isc Soiling Ratios - IV600 (Filtered 93-101%)', fontsize=20)
-            ax2.set_ylim(90, 110)
+            ax2.set_ylim(50, 110)
             ax2.tick_params(axis='both', labelsize=16)
             plt.xticks(rotation=30, ha='right', fontsize=16)
             plt.yticks(fontsize=16)
@@ -436,8 +600,22 @@ def run_analysis():
         for idx, col in enumerate(sr_pmp_iv600_weekly.columns):
             if not sr_pmp_iv600_weekly[col].dropna().empty:
                 color = colors[idx % len(colors)]
-                sr_pmp_iv600_weekly[col].plot(ax=ax3, style='-o', alpha=0.8, label=col, 
-                                            markersize=6, linewidth=2, color=color)
+                serie = sr_pmp_iv600_weekly[col].dropna()
+                
+                # Intentar obtener barras de error
+                yerr = get_error_bars(serie, uncertainty_data_weekly, col)
+                
+                if yerr is not None:
+                    # Graficar con barras de error
+                    avg_error = np.mean([e for e in yerr if e > 0])
+                    print(f"   📊 Agregando barras de error para {col} (error promedio: {avg_error:.2f}%)")
+                    ax3.errorbar(serie.index, serie.values, yerr=yerr, fmt='-o', 
+                                alpha=0.8, label=col, markersize=6, linewidth=2, color=color,
+                                capsize=4, capthick=2.0, elinewidth=2.0, ecolor=color)
+                else:
+                    # Graficar sin barras de error
+                    serie.plot(ax=ax3, style='-o', alpha=0.8, label=col, 
+                              markersize=6, linewidth=2, color=color)
                 plot_legend3.append(col)
         
         if plot_legend3:
@@ -446,7 +624,7 @@ def run_analysis():
             ax3.set_xlabel('Date', fontsize=16)
             ax3.grid(True)
             ax3.set_title('Pmp Soiling Ratios - IV600 (Weekly, Filtered 93-101%)', fontsize=20)
-            ax3.set_ylim(90, 110)
+            ax3.set_ylim(50, 110)
             ax3.tick_params(axis='both', labelsize=16)
             plt.xticks(rotation=30, ha='right', fontsize=16)
             plt.yticks(fontsize=16)
@@ -463,8 +641,22 @@ def run_analysis():
         for idx, col in enumerate(sr_isc_iv600_weekly.columns):
             if not sr_isc_iv600_weekly[col].dropna().empty:
                 color = colors[idx % len(colors)]
-                sr_isc_iv600_weekly[col].plot(ax=ax4, style='-o', alpha=0.8, label=col, 
-                                            markersize=6, linewidth=2, color=color)
+                serie = sr_isc_iv600_weekly[col].dropna()
+                
+                # Intentar obtener barras de error
+                yerr = get_error_bars(serie, uncertainty_data_weekly, col)
+                
+                if yerr is not None:
+                    # Graficar con barras de error
+                    avg_error = np.mean([e for e in yerr if e > 0])
+                    print(f"   📊 Agregando barras de error para {col} (error promedio: {avg_error:.2f}%)")
+                    ax4.errorbar(serie.index, serie.values, yerr=yerr, fmt='-o', 
+                                alpha=0.8, label=col, markersize=6, linewidth=2, color=color,
+                                capsize=4, capthick=2.0, elinewidth=2.0, ecolor=color)
+                else:
+                    # Graficar sin barras de error
+                    serie.plot(ax=ax4, style='-o', alpha=0.8, label=col, 
+                              markersize=6, linewidth=2, color=color)
                 plot_legend4.append(col)
         
         if plot_legend4:
@@ -473,7 +665,7 @@ def run_analysis():
             ax4.set_xlabel('Date', fontsize=16)
             ax4.grid(True)
             ax4.set_title('Isc Soiling Ratios - IV600 (Weekly Q25, Filtered 90-105%)', fontsize=20)
-            ax4.set_ylim(90, 110)
+            ax4.set_ylim(50, 110)
             ax4.tick_params(axis='both', labelsize=16)
             plt.xticks(rotation=30, ha='right', fontsize=16)
             plt.yticks(fontsize=16)
@@ -502,17 +694,35 @@ def run_analysis():
             sr_isc_filtered = sr_isc_clean.loc[common_dates]
         
             fig5, ax5 = plt.subplots(figsize=(15, 6))
-            sr_pmp_filtered.plot(ax=ax5, style='--o', alpha=0.75, 
-                                 label=f'Pmp SR ({sr_pmp_434_col_name})', markersize=4)
-            sr_isc_filtered.plot(ax=ax5, style='--o', alpha=0.75, 
-                                 label=f'Isc SR ({sr_isc_434_col_name})', markersize=4)
+            
+            # Pmp SR con barras de error
+            yerr_pmp = get_error_bars(sr_pmp_filtered, uncertainty_data_daily, sr_pmp_434_col_name)
+            if yerr_pmp is not None:
+                print(f"   📊 Agregando barras de error para Pmp (error promedio: {np.mean([e for e in yerr_pmp if e > 0]):.2f}%)")
+                ax5.errorbar(sr_pmp_filtered.index, sr_pmp_filtered.values, yerr=yerr_pmp, 
+                            fmt='--o', alpha=0.75, label=f'Pmp SR ({sr_pmp_434_col_name})', 
+                            markersize=4, capsize=4, capthick=2.0, elinewidth=2.0, ecolor='#1f77b4')
+            else:
+                sr_pmp_filtered.plot(ax=ax5, style='--o', alpha=0.75, 
+                                     label=f'Pmp SR ({sr_pmp_434_col_name})', markersize=4)
+            
+            # Isc SR con barras de error
+            yerr_isc = get_error_bars(sr_isc_filtered, uncertainty_data_daily, sr_isc_434_col_name)
+            if yerr_isc is not None:
+                print(f"   📊 Agregando barras de error para Isc (error promedio: {np.mean([e for e in yerr_isc if e > 0]):.2f}%)")
+                ax5.errorbar(sr_isc_filtered.index, sr_isc_filtered.values, yerr=yerr_isc, 
+                            fmt='--o', alpha=0.75, label=f'Isc SR ({sr_isc_434_col_name})', 
+                            markersize=4, capsize=4, capthick=2.0, elinewidth=2.0, ecolor='#ff7f0e')
+            else:
+                sr_isc_filtered.plot(ax=ax5, style='--o', alpha=0.75, 
+                                     label=f'Isc SR ({sr_isc_434_col_name})', markersize=4)
         
             ax5.legend(fontsize=14)
             ax5.set_ylabel('Soiling Ratio [%]', fontsize=16)
             ax5.set_xlabel('Date', fontsize=16)
             ax5.grid(True)
             ax5.set_title('Pmp vs Isc SR Comparison (1MD434/1MD439) - IV600 (Filtered 93-101%)', fontsize=20)
-            ax5.set_ylim(90, 110)
+            ax5.set_ylim(50, 110)
             ax5.tick_params(axis='both', labelsize=16)
             plt.xticks(rotation=30, ha='right', fontsize=16)
             plt.yticks(fontsize=16)
@@ -539,19 +749,37 @@ def run_analysis():
             sr_isc_weekly_filtered = sr_isc_weekly_clean.loc[common_dates_weekly]
         
             fig6, ax6 = plt.subplots(figsize=(15, 6))
-            sr_pmp_weekly_filtered.plot(ax=ax6, style='-o', alpha=0.8, 
-                                        label=f'Pmp SR ({sr_pmp_434_col_name})', 
-                                        markersize=6, linewidth=2)
-            sr_isc_weekly_filtered.plot(ax=ax6, style='-o', alpha=0.8, 
-                                        label=f'Isc SR ({sr_isc_434_col_name})', 
-                                        markersize=6, linewidth=2)
+            
+            # Pmp SR semanal con barras de error
+            yerr_pmp_w = get_error_bars(sr_pmp_weekly_filtered, uncertainty_data_weekly, sr_pmp_434_col_name)
+            if yerr_pmp_w is not None:
+                print(f"   📊 Agregando barras de error para Pmp semanal (error promedio: {np.mean([e for e in yerr_pmp_w if e > 0]):.2f}%)")
+                ax6.errorbar(sr_pmp_weekly_filtered.index, sr_pmp_weekly_filtered.values, yerr=yerr_pmp_w, 
+                            fmt='-o', alpha=0.8, label=f'Pmp SR ({sr_pmp_434_col_name})', 
+                            markersize=6, linewidth=2, capsize=4, capthick=2.0, elinewidth=2.0, ecolor='#1f77b4')
+            else:
+                sr_pmp_weekly_filtered.plot(ax=ax6, style='-o', alpha=0.8, 
+                                            label=f'Pmp SR ({sr_pmp_434_col_name})', 
+                                            markersize=6, linewidth=2)
+            
+            # Isc SR semanal con barras de error
+            yerr_isc_w = get_error_bars(sr_isc_weekly_filtered, uncertainty_data_weekly, sr_isc_434_col_name)
+            if yerr_isc_w is not None:
+                print(f"   📊 Agregando barras de error para Isc semanal (error promedio: {np.mean([e for e in yerr_isc_w if e > 0]):.2f}%)")
+                ax6.errorbar(sr_isc_weekly_filtered.index, sr_isc_weekly_filtered.values, yerr=yerr_isc_w, 
+                            fmt='-o', alpha=0.8, label=f'Isc SR ({sr_isc_434_col_name})', 
+                            markersize=6, linewidth=2, capsize=4, capthick=2.0, elinewidth=2.0, ecolor='#ff7f0e')
+            else:
+                sr_isc_weekly_filtered.plot(ax=ax6, style='-o', alpha=0.8, 
+                                            label=f'Isc SR ({sr_isc_434_col_name})', 
+                                            markersize=6, linewidth=2)
         
             ax6.legend(fontsize=14)
             ax6.set_ylabel('Soiling Ratio [%]', fontsize=16)
             ax6.set_xlabel('Date', fontsize=16)
             ax6.grid(True)
             ax6.set_title('Pmp vs Isc SR Comparison (1MD434/1MD439) - IV600 (Weekly Q25, Filtered 93-101%)', fontsize=20)
-            ax6.set_ylim(90, 110)
+            ax6.set_ylim(50, 110)
             ax6.tick_params(axis='both', labelsize=16)
             plt.xticks(rotation=30, ha='right', fontsize=16)
             plt.yticks(fontsize=16)
@@ -565,8 +793,9 @@ def run_analysis():
     # 10. GRÁFICOS ADICIONALES CON LÍNEAS DE TENDENCIA, PENDIENTE Y R²
     
     # Función auxiliar para calcular y mostrar estadísticas de regresión
-    def plot_with_trend_line(ax, y_data, label, color, marker_style, is_weekly=False):
-        """Agregar línea de tendencia con estadísticas integradas en la leyenda"""
+    def plot_with_trend_line(ax, y_data, label, color, marker_style, is_weekly=False, 
+                             uncertainty_data=None, sr_col_name=None):
+        """Agregar línea de tendencia con estadísticas integradas en la leyenda y barras de error"""
         # Filtrar datos válidos (sin NaN)
         valid_mask = ~pd.isna(y_data)
         if valid_mask.sum() < 2:  # Necesitamos al menos 2 puntos
@@ -599,9 +828,23 @@ def run_analysis():
         # Crear etiqueta multilínea con estadísticas integradas
         multiline_label = f"{label}\nTrend: {slope_per_period:.4f} %/{period_unit} R² = {r_value**2:.3f}"
         
-        # Plotear datos originales con etiqueta multilínea
-        ax.plot(y_valid.index, y_valid, marker_style, alpha=0.7, label=multiline_label, 
-                markersize=6, color=color)
+        # Intentar obtener barras de error si hay datos de incertidumbre
+        yerr = None
+        if uncertainty_data is not None and sr_col_name is not None:
+            yerr = get_error_bars(y_valid, uncertainty_data, sr_col_name)
+        
+        # Plotear datos originales con etiqueta multilínea y barras de error si están disponibles
+        if yerr is not None:
+            # Filtrar yerr para solo incluir puntos válidos
+            yerr_valid = [yerr[i] if i < len(yerr) else 0 for i in range(len(y_valid))]
+            # Extraer solo el marcador del estilo (ej: '-o' -> 'o-')
+            fmt_marker = 'o-' if marker_style == '-o' else 'o' if 'o' in marker_style else '-'
+            ax.errorbar(y_valid.index, y_valid.values, yerr=yerr_valid, fmt=fmt_marker, 
+                       alpha=0.7, label=multiline_label, markersize=6, color=color,
+                       capsize=4, capthick=2.0, elinewidth=2.0, ecolor=color)
+        else:
+            ax.plot(y_valid.index, y_valid, marker_style, alpha=0.7, label=multiline_label, 
+                    markersize=6, color=color)
         
         # Plotear línea de tendencia sin etiqueta
         ax.plot(y_valid.index, trend_line, '--', alpha=0.8, linewidth=2, 
@@ -636,9 +879,13 @@ def run_analysis():
         
         # Plotear con líneas de tendencia
         stats_pmp = plot_with_trend_line(ax7, sr_pmp_trend_filtered, 
-                                    'Pmp SR', '#1f77b4', '-o')
+                                    'Pmp SR', '#1f77b4', '-o', 
+                                    uncertainty_data=uncertainty_data_daily, 
+                                    sr_col_name=sr_pmp_434_col_name)
         stats_isc = plot_with_trend_line(ax7, sr_isc_trend_filtered, 
-                                        'Isc SR', '#ff7f0e', '-o')
+                                        'Isc SR', '#ff7f0e', '-o',
+                                        uncertainty_data=uncertainty_data_daily, 
+                                        sr_col_name=sr_isc_434_col_name)
     
         # Configurar gráfico
         ax7.legend(fontsize=12, loc='upper right')
@@ -646,7 +893,7 @@ def run_analysis():
         ax7.set_xlabel('Date', fontsize=16)
         ax7.grid(True, alpha=0.3)
         ax7.set_title('SR Pmp & Isc - IV600', fontsize=18)
-        ax7.set_ylim(90, 110)
+        ax7.set_ylim(50, 110)
         ax7.tick_params(axis='both', labelsize=14)
         
         plt.tight_layout()
@@ -675,9 +922,13 @@ def run_analysis():
         
         # Plotear con líneas de tendencia
         stats_pmp_w = plot_with_trend_line(ax8, sr_pmp_weekly_trend_filtered, 
-                                        'Pmp SR Semanal', '#1f77b4', '-o', is_weekly=True)
+                                        'Pmp SR Semanal', '#1f77b4', '-o', is_weekly=True,
+                                        uncertainty_data=uncertainty_data_weekly, 
+                                        sr_col_name=sr_pmp_434_col_name)
         stats_isc_w = plot_with_trend_line(ax8, sr_isc_weekly_trend_filtered, 
-                                            'Isc SR Semanal', '#ff7f0e', '-o', is_weekly=True)
+                                            'Isc SR Semanal', '#ff7f0e', '-o', is_weekly=True,
+                                            uncertainty_data=uncertainty_data_weekly, 
+                                            sr_col_name=sr_isc_434_col_name)
         
         # Configurar gráfico
         ax8.legend(fontsize=12, loc='upper right')
@@ -685,7 +936,7 @@ def run_analysis():
         ax8.set_xlabel('Date', fontsize=16)
         ax8.grid(True, alpha=0.3)
         ax8.set_title('SR Pmp & Isc - IV600 Q25', fontsize=18)
-        ax8.set_ylim(90, 110)
+        ax8.set_ylim(50, 110)
         ax8.tick_params(axis='both', labelsize=14)
         
         plt.tight_layout()
@@ -736,7 +987,7 @@ def run_analysis():
         ax9.set_xlabel('Date', fontsize=16)
         ax9.grid(True, alpha=0.3)
         ax9.set_title('SR Pmp & Isc - IV600 Q25', fontsize=18)
-        ax9.set_ylim(90, 110)
+        ax9.set_ylim(50, 110)
         ax9.tick_params(axis='both', labelsize=14)
         
         plt.tight_layout()
@@ -778,7 +1029,7 @@ def run_analysis():
             ax_q25.set_xlabel('Date', fontsize=16)
             ax_q25.grid(True, alpha=0.3)
             ax_q25.set_title('SR Pmp & Isc - IV600 Q25', fontsize=18)
-            ax_q25.set_ylim(90, 110)
+            ax_q25.set_ylim(50, 110)
             ax_q25.tick_params(axis='both', labelsize=14)
         
             plt.tight_layout()
@@ -828,7 +1079,7 @@ def run_analysis():
             ax11.set_xlabel('Date', fontsize=16)
             ax11.grid(True, alpha=0.3)
             ax11.set_title('SR Pmp & Isc - IV600', fontsize=18)
-            ax11.set_ylim(90, 110)
+            ax11.set_ylim(50, 110)
             ax11.tick_params(axis='both', labelsize=14)
         
         plt.tight_layout()

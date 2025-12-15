@@ -584,7 +584,7 @@ def run_uncertainty_propagation_analysis(
         
         # Agregación mensual (Q25)
         df_monthly = aggregate_with_uncertainty(
-            sr_series, U_campaign_k2_rel, freq='M', quantile=0.25,
+            sr_series, U_campaign_k2_rel, freq='ME', quantile=0.25,
             df_sr_uncertainty=df_sr_uncertainty_utc
         )
         if not df_monthly.empty:

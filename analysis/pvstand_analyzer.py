@@ -715,6 +715,9 @@ def analyze_pvstand_data(
         csv_filename_sr_data = os.path.join(output_csv_dir, "pvstand_datos_completos_calculos_sr.csv")
         df_data_used_for_sr.to_csv(csv_filename_sr_data)
         logger.info(f"Datos completos utilizados para cálculos de SR guardados en: {csv_filename_sr_data}")
+    else:
+        # Si no hay datos merged, crear DataFrame vacío para evitar errores
+        df_data_used_for_sr = pd.DataFrame()
 
     # --- Propagación de Errores (GUM) ---
     if not df_merged_for_corr.empty:
@@ -861,49 +864,93 @@ def analyze_pvstand_data(
         # Cargar incertidumbre semanal Isc
         uncertainty_file_weekly_isc = os.path.join(paths.PROPAGACION_ERRORES_PVSTAND_DIR, "sr_isc_weekly_abs_with_U.csv")
         if os.path.exists(uncertainty_file_weekly_isc):
-            df_uncertainty = pd.read_csv(uncertainty_file_weekly_isc, index_col='timestamp', parse_dates=True)
-            if df_uncertainty.index.tz is None:
-                df_uncertainty.index = df_uncertainty.index.tz_localize('UTC')
+            # El archivo tiene _time como primera columna, leerlo y establecer como índice
+            df_uncertainty = pd.read_csv(uncertainty_file_weekly_isc)
+            if '_time' in df_uncertainty.columns:
+                df_uncertainty['_time'] = pd.to_datetime(df_uncertainty['_time'])
+                df_uncertainty.set_index('_time', inplace=True)
+            elif df_uncertainty.index.name is None and len(df_uncertainty) > 0:
+                # Si no hay columna _time, usar la primera columna como índice si es datetime
+                first_col = df_uncertainty.columns[0]
+                df_uncertainty[first_col] = pd.to_datetime(df_uncertainty[first_col])
+                df_uncertainty.set_index(first_col, inplace=True)
+            # Verificar que el índice es DatetimeIndex antes de acceder a .tz
+            if isinstance(df_uncertainty.index, pd.DatetimeIndex):
+                if df_uncertainty.index.tz is None:
+                    df_uncertainty.index = df_uncertainty.index.tz_localize('UTC')
             uncertainty_data_weekly_isc = df_uncertainty
-            logger.info(f"Datos de incertidumbre semanal Isc cargados: {len(uncertainty_data_weekly_isc)} puntos")
+            logger.info(f"✅ Datos de incertidumbre semanal Isc cargados: {len(uncertainty_data_weekly_isc)} puntos. Columnas: {uncertainty_data_weekly_isc.columns.tolist()}")
         
         # Cargar incertidumbre semanal Pmax
         uncertainty_file_weekly_pmax = os.path.join(paths.PROPAGACION_ERRORES_PVSTAND_DIR, "sr_pmax_weekly_abs_with_U.csv")
         if os.path.exists(uncertainty_file_weekly_pmax):
-            df_uncertainty = pd.read_csv(uncertainty_file_weekly_pmax, index_col='timestamp', parse_dates=True)
-            if df_uncertainty.index.tz is None:
-                df_uncertainty.index = df_uncertainty.index.tz_localize('UTC')
+            df_uncertainty = pd.read_csv(uncertainty_file_weekly_pmax)
+            if '_time' in df_uncertainty.columns:
+                df_uncertainty['_time'] = pd.to_datetime(df_uncertainty['_time'])
+                df_uncertainty.set_index('_time', inplace=True)
+            elif df_uncertainty.index.name is None and len(df_uncertainty) > 0:
+                first_col = df_uncertainty.columns[0]
+                df_uncertainty[first_col] = pd.to_datetime(df_uncertainty[first_col])
+                df_uncertainty.set_index(first_col, inplace=True)
+            if isinstance(df_uncertainty.index, pd.DatetimeIndex):
+                if df_uncertainty.index.tz is None:
+                    df_uncertainty.index = df_uncertainty.index.tz_localize('UTC')
             uncertainty_data_weekly_pmax = df_uncertainty
-            logger.info(f"Datos de incertidumbre semanal Pmax cargados: {len(uncertainty_data_weekly_pmax)} puntos")
+            logger.info(f"✅ Datos de incertidumbre semanal Pmax cargados: {len(uncertainty_data_weekly_pmax)} puntos. Columnas: {uncertainty_data_weekly_pmax.columns.tolist()}")
         
         # Cargar incertidumbre diaria Isc (para gráficos de 3 días)
         uncertainty_file_daily_isc = os.path.join(paths.PROPAGACION_ERRORES_PVSTAND_DIR, "sr_isc_daily_abs_with_U.csv")
         if os.path.exists(uncertainty_file_daily_isc):
-            df_uncertainty = pd.read_csv(uncertainty_file_daily_isc, index_col='timestamp', parse_dates=True)
-            if df_uncertainty.index.tz is None:
-                df_uncertainty.index = df_uncertainty.index.tz_localize('UTC')
+            df_uncertainty = pd.read_csv(uncertainty_file_daily_isc)
+            if '_time' in df_uncertainty.columns:
+                df_uncertainty['_time'] = pd.to_datetime(df_uncertainty['_time'])
+                df_uncertainty.set_index('_time', inplace=True)
+            elif df_uncertainty.index.name is None and len(df_uncertainty) > 0:
+                first_col = df_uncertainty.columns[0]
+                df_uncertainty[first_col] = pd.to_datetime(df_uncertainty[first_col])
+                df_uncertainty.set_index(first_col, inplace=True)
+            if isinstance(df_uncertainty.index, pd.DatetimeIndex):
+                if df_uncertainty.index.tz is None:
+                    df_uncertainty.index = df_uncertainty.index.tz_localize('UTC')
             uncertainty_data_daily_isc = df_uncertainty
-            logger.info(f"Datos de incertidumbre diaria Isc cargados: {len(uncertainty_data_daily_isc)} puntos")
+            logger.info(f"✅ Datos de incertidumbre diaria Isc cargados: {len(uncertainty_data_daily_isc)} puntos. Columnas: {uncertainty_data_daily_isc.columns.tolist()}")
         
         # Cargar incertidumbre diaria Pmax (para gráficos de 3 días)
         uncertainty_file_daily_pmax = os.path.join(paths.PROPAGACION_ERRORES_PVSTAND_DIR, "sr_pmax_daily_abs_with_U.csv")
         if os.path.exists(uncertainty_file_daily_pmax):
-            df_uncertainty = pd.read_csv(uncertainty_file_daily_pmax, index_col='timestamp', parse_dates=True)
-            if df_uncertainty.index.tz is None:
-                df_uncertainty.index = df_uncertainty.index.tz_localize('UTC')
+            df_uncertainty = pd.read_csv(uncertainty_file_daily_pmax)
+            if '_time' in df_uncertainty.columns:
+                df_uncertainty['_time'] = pd.to_datetime(df_uncertainty['_time'])
+                df_uncertainty.set_index('_time', inplace=True)
+            elif df_uncertainty.index.name is None and len(df_uncertainty) > 0:
+                first_col = df_uncertainty.columns[0]
+                df_uncertainty[first_col] = pd.to_datetime(df_uncertainty[first_col])
+                df_uncertainty.set_index(first_col, inplace=True)
+            if isinstance(df_uncertainty.index, pd.DatetimeIndex):
+                if df_uncertainty.index.tz is None:
+                    df_uncertainty.index = df_uncertainty.index.tz_localize('UTC')
             uncertainty_data_daily_pmax = df_uncertainty
-            logger.info(f"Datos de incertidumbre diaria Pmax cargados: {len(uncertainty_data_daily_pmax)} puntos")
+            logger.info(f"✅ Datos de incertidumbre diaria Pmax cargados: {len(uncertainty_data_daily_pmax)} puntos. Columnas: {uncertainty_data_daily_pmax.columns.tolist()}")
     except Exception as e:
-        logger.warning(f"No se pudieron cargar datos de incertidumbre de PVStand: {e}")
+        logger.warning(f"No se pudieron cargar datos de incertidumbre de PVStand: {e}", exc_info=True)
 
     def _plot_sr_section_internal(df_to_plot, title_prefix, filename_suffix, is_normalized_section_flag_param):
-        if df_to_plot.empty:
-            logger.info(f"No hay datos para graficar en la sección: {title_prefix}")
+        # Verificar si el DataFrame está realmente vacío (sin filas o sin columnas)
+        logger.info(f"🔍 Verificando DataFrame para: {title_prefix}")
+        logger.info(f"   - Filas: {len(df_to_plot)}, Columnas: {len(df_to_plot.columns)}")
+        logger.info(f"   - df.empty: {df_to_plot.empty}, len(df) == 0: {len(df_to_plot) == 0}")
+        
+        if df_to_plot.empty or len(df_to_plot) == 0:
+            logger.info(f"❌ No hay datos para graficar en la sección: {title_prefix} (DataFrame vacío o sin filas)")
             return
 
-        logger.info(f"Generando gráficos para: {title_prefix}")
+        logger.info(f"✅ Generando gráficos para: {title_prefix}")
         num_series = len(df_to_plot.columns)
-        if num_series == 0: return
+        if num_series == 0:
+            logger.info(f"❌ No hay columnas para graficar en la sección: {title_prefix}")
+            return
+        
+        logger.info(f"   - Columnas disponibles: {df_to_plot.columns.tolist()}")
             
         line_styles = ['-', '--', '-.', ':'] * (num_series // 4 + 1)
         base_markersize = 4 if 'Media Móvil' not in filename_suffix else 2
@@ -920,8 +967,16 @@ def analyze_pvstand_data(
             tendencias_info = []  # Para guardar info de tendencias
             for i, col_name_plot in enumerate(df_to_plot.columns):
                 series_plot = df_to_plot[col_name_plot]
+                logger.debug(f"   Procesando columna {i+1}/{num_series}: {col_name_plot}")
+                logger.debug(f"      - Es Series: {isinstance(series_plot, pd.Series)}")
+                logger.debug(f"      - dropna().empty: {series_plot.dropna().empty if isinstance(series_plot, pd.Series) else 'N/A'}")
+                logger.debug(f"      - Es DatetimeIndex: {isinstance(series_plot.index, pd.DatetimeIndex) if isinstance(series_plot, pd.Series) else 'N/A'}")
+                
                 if not isinstance(series_plot, pd.Series) or series_plot.dropna().empty or not isinstance(series_plot.index, pd.DatetimeIndex):
+                    logger.debug(f"      ⚠️  Saltando columna {col_name_plot} (no cumple condiciones)")
                     continue
+                
+                logger.debug(f"      ✅ Columna {col_name_plot} válida, procesando...")
                 try:
                     data_agg = pd.Series(dtype=float)
                     if 'Media Móvil' in plot_desc_agg_str:
@@ -943,6 +998,12 @@ def analyze_pvstand_data(
                         else:  # 3D (usar datos diarios)
                             uncertainty_data = uncertainty_data_daily_isc if is_isc else (uncertainty_data_daily_pmax if is_pmax else None)
                         
+                        # Log para diagnóstico
+                        if uncertainty_data is None:
+                            logger.debug(f"No hay datos de incertidumbre para {col_name_plot} (is_isc={is_isc}, is_pmax={is_pmax}, freq={resample_rule_str})")
+                        elif 'U_rel_k2' not in uncertainty_data.columns:
+                            logger.warning(f"Datos de incertidumbre para {col_name_plot} no tienen columna 'U_rel_k2'. Columnas disponibles: {uncertainty_data.columns.tolist()}")
+                        
                         # Agregar barras de error si hay datos de incertidumbre
                         if uncertainty_data is not None and 'U_rel_k2' in uncertainty_data.columns:
                             yerr = []
@@ -955,19 +1016,22 @@ def analyze_pvstand_data(
                             elif data_agg.index.tz is not None and uncertainty_index.tz is not None:
                                 uncertainty_index = uncertainty_index.tz_convert(data_agg.index.tz)
                             
+                            n_matched = 0
                             for j, date in enumerate(data_agg.index):
                                 sr_val = data_agg.iloc[j]
                                 if pd.notna(sr_val):
                                     if date in uncertainty_index:
                                         u_rel = uncertainty_data.loc[date, 'U_rel_k2']
+                                        n_matched += 1
                                     else:
                                         time_diffs = abs(uncertainty_index - date)
                                         closest_idx = time_diffs.argmin()
                                         max_timedelta = pd.Timedelta(days=3) if resample_rule_str == '1W' else pd.Timedelta(days=1)
                                         if time_diffs[closest_idx] <= max_timedelta:
                                             u_rel = uncertainty_data.iloc[closest_idx]['U_rel_k2']
+                                            n_matched += 1
                                         else:
-                                            u_rel = np.nan
+                                            u_rel = float('nan')
                                     
                                     if pd.notna(u_rel):
                                         yerr.append(u_rel * sr_val / 100.0)
@@ -975,6 +1039,12 @@ def analyze_pvstand_data(
                                         yerr.append(0)
                                 else:
                                     yerr.append(0)
+                            
+                            # Log para diagnóstico
+                            if n_matched > 0:
+                                logger.info(f"Barras de error agregadas para {col_name_plot}: {n_matched}/{len(data_agg)} puntos con incertidumbre")
+                            else:
+                                logger.warning(f"No se encontraron coincidencias de fecha para barras de error en {col_name_plot}")
                             
                             errorbar_result = ax.errorbar(data_agg.index, data_agg.values, yerr=yerr,
                                                          linestyle=line_styles[i % len(line_styles)],
@@ -1008,6 +1078,7 @@ def analyze_pvstand_data(
                 except Exception as e_plot:
                     logger.error(f"Error graficando '{col_name_plot}' para '{plot_desc_agg_str}' en '{title_prefix}': {e_plot}", exc_info=True)
             
+            logger.info(f"   - has_data_for_this_agg_plot: {has_data_for_this_agg_plot} para {plot_desc_agg_str}")
             if has_data_for_this_agg_plot:
                 # Título especial para el gráfico semanal normalizado
                 if filename_suffix == 'norm' and 'semanal' in plot_desc_agg_str.lower():
@@ -1035,7 +1106,7 @@ def analyze_pvstand_data(
                     logger.info(f"Gáfico guardado en: {os.path.join(graph_base_plus_subdir, plot_filename)}")
                 
                 if show_figures_setting: 
-                    plt.show(block=True)  # Agregado block=True para asegurar que se muestre
+                    plt.show(block=False)  # Cambiado a block=False para no bloquear la ejecución
                     logger.info("Gráfico mostrado")
                 else:
                     plt.close(fig)
@@ -1058,6 +1129,79 @@ def analyze_pvstand_data(
                      "raw_no_offset", 
                      is_normalized_section_flag_param=False)
 
+    # --- Generar gráfico de temperaturas utilizadas ---
+    if not df_data_used_for_sr.empty and 'Temp_Modulo_Soiled_C' in df_data_used_for_sr.columns:
+        logger.info("Generando gráfico de temperaturas utilizadas en el análisis...")
+        def _plot_temperature_data(df_temp_data, output_dir, save_figs, show_figs):
+            """
+            Genera gráfico de temperaturas de módulos utilizadas en el análisis.
+            Muestra temperaturas de módulo soiled, reference y su diferencia.
+            """
+            if df_temp_data.empty:
+                logger.info("No hay datos de temperatura para graficar.")
+                return
+            
+            logger.info("Generando gráfico de temperaturas...")
+            
+            # Verificar que existan las columnas de temperatura
+            temp_cols = ['Temp_Modulo_Soiled_C', 'Temp_Modulo_Reference_C', 'Diferencia_Temperatura_C']
+            available_cols = [col for col in temp_cols if col in df_temp_data.columns]
+            
+            if not available_cols:
+                logger.warning("No se encontraron columnas de temperatura para graficar.")
+                return
+            
+            fig, ax = plt.subplots(figsize=(20, 10))
+            
+            # Colores para cada serie
+            colors = {
+                'Temp_Modulo_Soiled_C': '#d62728',  # Rojo
+                'Temp_Modulo_Reference_C': '#1f77b4',  # Azul
+                'Diferencia_Temperatura_C': '#2ca02c'  # Verde
+            }
+            
+            labels = {
+                'Temp_Modulo_Soiled_C': 'Temperatura Módulo Soiled [°C]',
+                'Temp_Modulo_Reference_C': 'Temperatura Módulo Reference [°C]',
+                'Diferencia_Temperatura_C': 'Diferencia de Temperatura [°C]'
+            }
+            
+            for col in available_cols:
+                data_series = df_temp_data[col].dropna()
+                if not data_series.empty:
+                    ax.plot(data_series.index, data_series.values, 
+                           color=colors.get(col, '#000000'), 
+                           alpha=0.7, 
+                           linewidth=1.0,
+                           label=labels.get(col, col.replace('_', ' ')))
+            
+            ax.set_title('Temperaturas de Módulos Utilizadas en el Análisis PVStand', fontsize=20)
+            ax.set_xlabel('Fecha', fontsize=18)
+            ax.set_ylabel('Temperatura [°C]', fontsize=18)
+            ax.grid(True, which='both', linestyle='--', linewidth=0.5)
+            ax.legend(loc='best', fontsize=14)
+            ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+            ax.tick_params(axis='both', labelsize=14)
+            plt.xticks(rotation=30, ha='right', fontsize=14)
+            plt.yticks(fontsize=14)
+            plt.tight_layout()
+            
+            plot_filename = "pvstand_temperaturas_utilizadas.png"
+            
+            if save_figs:
+                save_plot_matplotlib(fig, plot_filename, output_dir, subfolder=None)
+                logger.info(f"Gráfico de temperaturas guardado: {plot_filename}")
+            
+            if show_figs:
+                plt.show(block=False)
+                logger.info("Gráfico de temperaturas mostrado")
+            else:
+                plt.close(fig)
+        
+        _plot_temperature_data(df_data_used_for_sr, graph_base_plus_subdir, save_figures_setting, show_figures_setting)
+    else:
+        logger.warning("No hay datos de temperatura disponibles para el gráfico.")
+    
     # --- Generar gráfico de potencias brutas ---
     if 'df_pvstand_original_unfiltered' in locals() and not df_pvstand_original_unfiltered.empty:
         logger.info("Generando gráfico de potencias brutas (datos originales sin filtros)...")

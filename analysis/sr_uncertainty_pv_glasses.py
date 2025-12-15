@@ -349,7 +349,7 @@ def aggregate_with_uncertainty(
     
     Args:
         df_result: DataFrame con resultados de process_campaign_uncertainty
-        freq: Frecuencia de agregación ('D'=diario, 'W'=semanal, 'M'=mensual)
+        freq: Frecuencia de agregación ('D'=diario, 'W'=semanal, 'ME'=mensual)
         method: Método de agregación ('mean' o 'quantile')
     
     Returns:
@@ -437,8 +437,27 @@ def run_uncertainty_propagation_analysis_pv_glasses(
         try:
             # Intentar leer con pandas (asumiendo formato similar a ref_cells)
             df_pv_glasses = pd.read_csv(input_file, index_col='_time', parse_dates=True)
+            
+            # Asegurar que el índice es DatetimeIndex y está en UTC
+            if not isinstance(df_pv_glasses.index, pd.DatetimeIndex):
+                logger.error("El índice no es un DatetimeIndex después de cargar el archivo")
+                return False
+            
+            # Manejar timezone: asegurar UTC
+            if df_pv_glasses.index.tz is None:
+                logger.info("Índice es DatetimeIndex pero naive. Localizando a UTC...")
+                df_pv_glasses.index = df_pv_glasses.index.tz_localize('UTC', ambiguous='infer', nonexistent='shift_forward')
+            elif df_pv_glasses.index.tz != pytz.UTC:
+                logger.info(f"Índice con zona horaria {df_pv_glasses.index.tz}. Convirtiendo a UTC...")
+                df_pv_glasses.index = df_pv_glasses.index.tz_convert('UTC')
+            else:
+                logger.info("Índice ya es DatetimeIndex y está en UTC.")
+            
+            df_pv_glasses.sort_index(inplace=True)
+            logger.info(f"Índice procesado a UTC. Rango: {df_pv_glasses.index.min()} a {df_pv_glasses.index.max()}")
+            
         except Exception as e:
-            logger.error(f"Error al cargar datos: {e}")
+            logger.error(f"Error al cargar datos: {e}", exc_info=True)
             return False
         
         logger.info(f"Datos cargados: {len(df_pv_glasses)} filas, {len(df_pv_glasses.columns)} columnas")
@@ -485,7 +504,7 @@ def run_uncertainty_propagation_analysis_pv_glasses(
         freq_mapping = {
             'D': ('diario', paths.PV_GLASSES_SR_DAILY_ABS_WITH_U_FILE),
             'W': ('semanal', paths.PV_GLASSES_SR_WEEKLY_ABS_WITH_U_FILE),
-            'M': ('mensual', paths.PV_GLASSES_SR_MONTHLY_ABS_WITH_U_FILE)
+            'ME': ('mensual', paths.PV_GLASSES_SR_MONTHLY_ABS_WITH_U_FILE)
         }
         
         for freq, (freq_name, output_file_agg) in freq_mapping.items():

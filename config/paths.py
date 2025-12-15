@@ -31,6 +31,7 @@ PVSTAND_IV_DATA_FILENAME = "raw_pvstand_iv_data.csv"
 PVSTAND_TEMP_DATA_FILENAME = 'data_temp.csv'  # Generado por notebook
 REFCELLS_RAW_DATA_FILENAME = "refcells_data.csv"
 SOILING_KIT_RAW_DATA_FILENAME = "soiling_kit_raw_data.csv"
+IV600_RAW_DATA_FILENAME = "raw_iv600_data.csv"
 
 # Rutas completas de archivos de entrada
 CALENDAR_RAW_DATA_FILE = os.path.join(BASE_INPUT_DIR, CALENDAR_RAW_DATA_FILENAME)
@@ -40,7 +41,10 @@ PVSTAND_IV_DATA_FILE = os.path.join(BASE_INPUT_DIR, "pvstand", PVSTAND_IV_DATA_F
 PVSTAND_TEMP_DATA_FILE = os.path.join(BASE_INPUT_DIR, "pvstand", PVSTAND_TEMP_DATA_FILENAME)
 # RefCells se guarda en subdirectorio refcells/
 REFCELLS_RAW_DATA_FILE = os.path.join(BASE_INPUT_DIR, "refcells", REFCELLS_RAW_DATA_FILENAME)
-SOILING_KIT_RAW_DATA_FILE = os.path.join(BASE_INPUT_DIR, SOILING_KIT_RAW_DATA_FILENAME)
+# Soiling Kit se guarda en subdirectorio soiling_kit/
+SOILING_KIT_RAW_DATA_FILE = os.path.join(BASE_INPUT_DIR, "soiling_kit", SOILING_KIT_RAW_DATA_FILENAME)
+# IV600 se guarda en subdirectorio iv600/
+IV600_RAW_DATA_FILE = os.path.join(BASE_INPUT_DIR, "iv600", IV600_RAW_DATA_FILENAME)
 
 # ============================================================================
 # ARCHIVOS DE TEMPERATURA (LEGACY + NUEVO SISTEMA)
@@ -65,6 +69,7 @@ REFCELLS_DATA = REFCELLS_RAW_DATA_FILE
 PVSTAND_IV_DATA = PVSTAND_IV_DATA_FILE
 PV_GLASSES_RAW_DATA = PV_GLASSES_RAW_DATA_FILE
 CALENDAR_FILE = CALENDAR_RAW_DATA_FILE
+IV600_RAW_DATA = IV600_RAW_DATA_FILE
 
 # ============================================================================
 # DIRECTORIOS DE SALIDA POR MÓDULO
@@ -101,6 +106,7 @@ PROPAGACION_ERRORES_PVSTAND_DIR = os.path.join(PROPAGACION_ERRORES_DIR, "pvstand
 PROPAGACION_ERRORES_DUSTIQ_DIR = os.path.join(PROPAGACION_ERRORES_DIR, "dustiq")
 PROPAGACION_ERRORES_PV_GLASSES_DIR = os.path.join(PROPAGACION_ERRORES_DIR, "pv_glasses")
 PROPAGACION_ERRORES_IV600_DIR = os.path.join(PROPAGACION_ERRORES_DIR, "iv600")
+PROPAGACION_ERRORES_MASS_DIR = os.path.join(PROPAGACION_ERRORES_DIR, "mass")
 
 # Asegurar que los directorios existen
 os.makedirs(PROPAGACION_ERRORES_REF_CELL_DIR, exist_ok=True)
@@ -110,6 +116,7 @@ os.makedirs(PROPAGACION_ERRORES_PVSTAND_DIR, exist_ok=True)
 os.makedirs(PROPAGACION_ERRORES_DUSTIQ_DIR, exist_ok=True)
 os.makedirs(PROPAGACION_ERRORES_PV_GLASSES_DIR, exist_ok=True)
 os.makedirs(PROPAGACION_ERRORES_IV600_DIR, exist_ok=True)
+os.makedirs(PROPAGACION_ERRORES_MASS_DIR, exist_ok=True)
 
 # Archivos de salida de incertidumbre (propagación GUM) - Ref Cells
 SR_MINUTE_WITH_UNCERTAINTY_FILE = os.path.join(PROPAGACION_ERRORES_REF_CELL_DIR, "sr_minute_with_uncertainty.csv")
@@ -152,6 +159,13 @@ IV600_SR_DAILY_ABS_WITH_U_FILE = os.path.join(PROPAGACION_ERRORES_IV600_DIR, "sr
 IV600_SR_WEEKLY_ABS_WITH_U_FILE = os.path.join(PROPAGACION_ERRORES_IV600_DIR, "sr_semanal_abs_with_U.csv")
 IV600_SR_MONTHLY_ABS_WITH_U_FILE = os.path.join(PROPAGACION_ERRORES_IV600_DIR, "sr_mensual_abs_with_U.csv")
 IV600_SR_UNCERTAINTY_SUMMARY_FILE = os.path.join(PROPAGACION_ERRORES_IV600_DIR, "sr_uncertainty_summary.txt")
+
+# ============================================================================
+# RUTAS DE SALIDA PARA ANÁLISIS DE INCERTIDUMBRE DE MASAS
+# ============================================================================
+
+MASS_DIFFERENCES_WITH_UNCERTAINTY_FILE = os.path.join(PROPAGACION_ERRORES_MASS_DIR, "diferencias_masas_with_uncertainty.csv")
+MASS_UNCERTAINTY_SUMMARY_FILE = os.path.join(PROPAGACION_ERRORES_MASS_DIR, "mass_uncertainty_summary.txt")
 
 # Archivos legacy (compatibilidad)
 SR_DAILY_Q25_WITH_CI_FILE = os.path.join(BASE_OUTPUTS_DIR, "sr_daily_q25_with_ci.csv")

@@ -881,52 +881,41 @@ def download_pv_glasses(start_date, end_date, output_dir, attributes=None):
     """
     Descarga y procesa datos de PV Glasses desde ClickHouse.
     
-    Esta función:
+    Esta función usa los nombres correctos de columnas en ClickHouse:
     - Esquema: "PSDA"
     - Tabla: "ftc6852"
-    - Columnas: Se pueden seleccionar dinámicamente o usar las por defecto
+    - Columnas en ClickHouse: RFC1Avg, RFC2Avg, RFC3Avg, RFC4Avg, RFC5Avg
+    - Columnas en output: R_FC1_Avg, R_FC2_Avg, R_FC3_Avg, R_FC4_Avg, R_FC5_Avg
     
-    Filtra por horario (13:00-18:00) y guarda en CSV.
+    Filtra por horario (13:00-18:00), calcula REF como promedio de R_FC1_Avg y R_FC2_Avg,
+    y guarda en CSV directamente en el directorio de salida.
     
     Args:
         start_date (datetime): Fecha de inicio del rango (con timezone)
         end_date (datetime): Fecha de fin del rango (con timezone)
         output_dir (str): Directorio donde guardar los archivos
         attributes (list, optional): Lista de atributos/fotoceldas a descargar.
-                                     Si es None, usa las fotoceldas por defecto.
+                                     Si es None, usa las fotoceldas por defecto (R_FC1_Avg a R_FC5_Avg).
         
     Returns:
         bool: True si la descarga fue exitosa, False en caso contrario
     """
     logger.info("🔋 Iniciando descarga de datos PV Glasses desde ClickHouse...")
     
-    # Usar fotoceldas por defecto si no se especifican
-    if attributes is None:
-        attributes = DEFAULT_PHOTODIODES
-    
     client = None
     
     try:
-        # Configuración de la consulta
-        schema = "PSDA"  # Esquema/base de datos en ClickHouse
-        table = "ftc6852"  # Tabla en ClickHouse
-        
-        logger.info(f"📊 Configuración:")
-        logger.info(f"   Esquema: {schema}")
-        logger.info(f"   Tabla: {table}")
-        logger.info(f"   Attributes: {attributes}")
-        
         # Conectar a ClickHouse
         logger.info("Conectando a ClickHouse...")
         client = clickhouse_connect.get_client(
             host=CLICKHOUSE_CONFIG['host'],
-            port=int(CLICKHOUSE_CONFIG['port']),
+            port=CLICKHOUSE_CONFIG['port'],
             username=CLICKHOUSE_CONFIG['user'],
             password=CLICKHOUSE_CONFIG['password']
         )
         logger.info("✅ Conexión a ClickHouse establecida")
         
-        # Convertir fechas al formato para ClickHouse (asegurar timezone UTC)
+        # Convertir fechas al formato para ClickHouse
         if isinstance(start_date, pd.Timestamp):
             start_date_utc = pd.Timestamp(start_date)
         else:
@@ -953,32 +942,32 @@ def download_pv_glasses(start_date, end_date, output_dir, attributes=None):
         
         logger.info(f"📅 Consultando datos desde {start_str} hasta {end_str}")
         
-        # Mapear nombres de atributos a columnas de ClickHouse
-        # Formato esperado: "R_FC{N}_{StatType}" -> "RFC{N}{StatType}"
-        columns_clickhouse = ["timestamp"]
+        # Usar fotoceldas por defecto si no se especifican
+        if attributes is None:
+            attributes = DEFAULT_PHOTODIODES  # R_FC1_Avg, R_FC2_Avg, etc.
+        
+        # Obtener nombres de columnas en ClickHouse usando el mapeo
+        clickhouse_columns = []
+        column_mapping = {}  # Mapeo de columnas ClickHouse -> nombres estándar
         for attr in attributes:
             if attr in ATTRIBUTE_TO_COLUMN:
-                # Usar mapeo conocido
-                columns_clickhouse.append(ATTRIBUTE_TO_COLUMN[attr])
+                ch_col = ATTRIBUTE_TO_COLUMN[attr]
+                clickhouse_columns.append(ch_col)
+                column_mapping[ch_col] = attr
             else:
-                # Intentar construir el nombre de columna dinámicamente
-                # Patrón: R_FC{N}_{StatType} -> RFC{N}{StatType}
-                match = re.match(r'R_FC(\d+)_(\w+)', attr)
-                if match:
-                    num_fotocelda = match.group(1)
-                    stat_type = match.group(2)
-                    columna_clickhouse = f"RFC{num_fotocelda}{stat_type}"
-                    columns_clickhouse.append(columna_clickhouse)
-                else:
-                    # Si no coincide el patrón, usar el nombre del atributo directamente
-                    columns_clickhouse.append(attr)
+                logger.warning(f"⚠️  Atributo '{attr}' no encontrado en mapeo ATTRIBUTE_TO_COLUMN")
         
-        columns_str = ", ".join(columns_clickhouse)
+        if not clickhouse_columns:
+            logger.error("❌ No se encontraron columnas válidas para consultar")
+            return False
         
+        # Construir consulta SQL usando los nombres correctos de ClickHouse
+        columns_str = ", ".join(clickhouse_columns)
         query = f"""
         SELECT 
+            timestamp,
             {columns_str}
-        FROM {schema}.{table}
+        FROM PSDA.ftc6852 
         WHERE timestamp >= '{start_str}' 
         AND timestamp <= '{end_str}'
         ORDER BY timestamp
@@ -996,74 +985,60 @@ def download_pv_glasses(start_date, end_date, output_dir, attributes=None):
         
         logger.info(f"📊 Datos obtenidos: {len(result.result_set)} registros")
         
-        # Convertir a DataFrame usando los nombres de columnas de ClickHouse
-        df_glasses = pd.DataFrame(result.result_set, columns=columns_clickhouse)
+        # Convertir a DataFrame - los nombres de columnas vienen de ClickHouse (RFC1Avg, etc.)
+        df_columns = ['timestamp'] + clickhouse_columns
+        df_glasses = pd.DataFrame(result.result_set, columns=df_columns)
         
-        # Renombrar columnas para mantener compatibilidad con el código existente
-        # timestamp → _time
-        # RFC1Avg → R_FC1_Avg, etc.
+        # Renombrar columnas de ClickHouse a nombres estándar (R_FC1_Avg, etc.)
         column_rename_map = {'timestamp': '_time'}
-        for attr in attributes:
-            if attr in ATTRIBUTE_TO_COLUMN:
-                # Si el atributo está en el mapeo, renombrar la columna de ClickHouse al atributo
-                column_clickhouse = ATTRIBUTE_TO_COLUMN[attr]
-                column_rename_map[column_clickhouse] = attr
-            else:
-                # Intentar construir el nombre de columna dinámicamente
-                match = re.match(r'R_FC(\d+)_(\w+)', attr)
-                if match:
-                    num_fotocelda = match.group(1)
-                    stat_type = match.group(2)
-                    column_clickhouse = f"RFC{num_fotocelda}{stat_type}"
-                    column_rename_map[column_clickhouse] = attr
-                # Si no coincide el patrón, el atributo es el mismo que la columna en ClickHouse
-                # No necesitamos renombrar
+        for ch_col, std_col in column_mapping.items():
+            column_rename_map[ch_col] = std_col
         
         df_glasses.rename(columns=column_rename_map, inplace=True)
         
-        # Convertir timestamp a datetime y asegurar timezone UTC
+        # Convertir timestamp a datetime
         df_glasses['_time'] = pd.to_datetime(df_glasses['_time'])
-        if df_glasses['_time'].dt.tz is None:
-            df_glasses['_time'] = df_glasses['_time'].dt.tz_localize('UTC')
-        else:
-            df_glasses['_time'] = df_glasses['_time'].dt.tz_convert('UTC')
         
         # Establecer índice de tiempo
         df_glasses.set_index('_time', inplace=True)
         
         logger.info(f"📅 Rango de fechas obtenido: {df_glasses.index.min()} a {df_glasses.index.max()}")
         
-        # Filtrar por horario (13:00 a 18:00)
-        df_glasses = df_glasses.between_time('13:00', '18:00')
-        logger.info(f"🕐 Después del filtro horario (13:00-18:00): {len(df_glasses)} registros")
+        # Filtrar por horario (13:00 a 18:00) - opcional según el análisis original
+        df_glasses_filtered = df_glasses.between_time('13:00', '18:00')
+        logger.info(f"🕐 Después del filtro horario (13:00-18:00): {len(df_glasses_filtered)} registros")
         
-        # Seleccionar solo las columnas numéricas para el cálculo
-        numeric_columns = df_glasses.select_dtypes(include=[np.number]).columns
-        df_glasses_numeric = df_glasses[numeric_columns]
+        # Calcular columna REF como promedio de R_FC1_Avg y R_FC2_Avg
+        if 'R_FC1_Avg' in df_glasses_filtered.columns and 'R_FC2_Avg' in df_glasses_filtered.columns:
+            df_glasses_filtered = df_glasses_filtered.copy()  # Evitar SettingWithCopyWarning
+            df_glasses_filtered['REF'] = (df_glasses_filtered['R_FC1_Avg'] + df_glasses_filtered['R_FC2_Avg']) / 2
+            logger.info("✅ Columna REF calculada como promedio de R_FC1_Avg y R_FC2_Avg")
         
-        # Calcular referencia (promedio de la primera fotocelda disponible)
-        if len(numeric_columns) > 0:
-            primera_fotocelda = numeric_columns[0]
-            df_glasses['Ref'] = df_glasses_numeric[primera_fotocelda].mean()
-            logger.info(f"📊 Referencia calculada usando: {primera_fotocelda}")
+        # Guardar archivo directamente en el directorio de salida (no en subdirectorio)
+        output_filepath = os.path.join(output_dir, 'raw_pv_glasses_data.csv')
         
-        # Crear carpeta específica para PV Glasses
-        section_dir = os.path.join(output_dir, 'pv_glasses')
-        os.makedirs(section_dir, exist_ok=True)
-        logger.info(f"📁 Carpeta de sección: {section_dir}")
+        # Resetear índice para guardar '_time' como columna
+        df_to_save = df_glasses_filtered.reset_index()
+        df_to_save.to_csv(output_filepath, index=False)
         
-        # Guardar datos
-        output_filepath = os.path.join(section_dir, 'raw_pv_glasses_data.csv')
-        df_glasses.to_csv(output_filepath)
+        logger.info(f"💾 Archivo guardado: {output_filepath}")
+        logger.info(f"📊 Total de registros guardados: {len(df_to_save):,}")
+        logger.info(f"📅 Rango final: {df_to_save['_time'].min()} a {df_to_save['_time'].max()}")
         
-        logger.info(f"✅ Datos PV Glasses guardados exitosamente")
-        logger.info(f"📊 Total de registros: {len(df_glasses)}")
-        logger.info(f"📅 Rango de fechas: {df_glasses.index.min()} a {df_glasses.index.max()}")
+        # Verificar si cubre el periodo "1 año"
+        fecha_necesaria = pd.to_datetime('2025-08-05')
+        if pd.to_datetime(df_to_save['_time'].max()) >= fecha_necesaria:
+            logger.info(f"✅ Los datos SÍ cubren el periodo '1 año' (hasta {fecha_necesaria.strftime('%Y-%m-%d')})")
+        else:
+            fecha_max = pd.to_datetime(df_to_save['_time'].max())
+            logger.info(f"⚠️ Los datos llegan hasta {fecha_max.strftime('%Y-%m-%d')}")
+            logger.info(f"   Para cubrir '1 año' se necesita hasta {fecha_necesaria.strftime('%Y-%m-%d')}")
         
+        logger.info("✅ Datos PV Glasses guardados exitosamente desde ClickHouse")
         return True
         
     except Exception as e:
-        logger.error(f"❌ Error en la descarga de datos PV Glasses: {e}")
+        logger.error(f"❌ Error en la descarga de datos PV Glasses desde ClickHouse: {e}")
         import traceback
         logger.error(f"Detalles del error:\n{traceback.format_exc()}")
         return False
@@ -1232,7 +1207,7 @@ def download_soiling_kit_clickhouse(start_date, end_date, output_dir):
     Esta función:
     - Esquema: "PSDA"
     - Tabla: "soiling_kit"
-    - Columnas: "stamptime", "Isc(p)", "Isc(e)", "Tp(C)", "Te(C)"
+    - Columnas: "timestamp", "Isc(e)", "Isc(p)", "Te(C)", "Tp(C)"
     - La tabla ya tiene las columnas en formato ancho (wide format)
     
     Args:
@@ -1289,14 +1264,14 @@ def download_soiling_kit_clickhouse(start_date, end_date, output_dir):
         logger.info("Consultando datos del Soiling Kit desde ClickHouse...")
         query = f"""
         SELECT 
-            stamptime,
-            `Isc(p)`,
+            timestamp,
             `Isc(e)`,
-            `Tp(C)`,
-            `Te(C)`
+            `Isc(p)`,
+            `Te(C)`,
+            `Tp(C)`
         FROM PSDA.soiling_kit 
-        WHERE stamptime >= '{start_str}' AND stamptime <= '{end_str}'
-        ORDER BY stamptime
+        WHERE timestamp >= '{start_str}' AND timestamp <= '{end_str}'
+        ORDER BY timestamp
         """
         
         logger.info("Ejecutando consulta ClickHouse...")
@@ -1310,32 +1285,32 @@ def download_soiling_kit_clickhouse(start_date, end_date, output_dir):
             
         logger.info(f"📊 Datos obtenidos: {len(result.result_set)} registros")
         
-        # Convertir a DataFrame
+        # Convertir a DataFrame con el orden correcto: timestamp, Isc(e), Isc(p), Te(C), Tp(C)
         logger.info("Procesando datos...")
-        df_soilingkit = pd.DataFrame(result.result_set, columns=['stamptime', 'Isc(p)', 'Isc(e)', 'Tp(C)', 'Te(C)'])
+        df_soilingkit = pd.DataFrame(result.result_set, columns=['timestamp', 'Isc(e)', 'Isc(p)', 'Te(C)', 'Tp(C)'])
         
-        # Convertir stamptime a datetime y asegurar que esté en UTC
-        df_soilingkit['stamptime'] = pd.to_datetime(df_soilingkit['stamptime'])
-        if df_soilingkit['stamptime'].dt.tz is None:
-            df_soilingkit['stamptime'] = df_soilingkit['stamptime'].dt.tz_localize('UTC')
+        # Convertir timestamp a datetime y asegurar que esté en UTC
+        df_soilingkit['timestamp'] = pd.to_datetime(df_soilingkit['timestamp'])
+        if df_soilingkit['timestamp'].dt.tz is None:
+            df_soilingkit['timestamp'] = df_soilingkit['timestamp'].dt.tz_localize('UTC')
         else:
-            df_soilingkit['stamptime'] = df_soilingkit['stamptime'].dt.tz_convert('UTC')
+            df_soilingkit['timestamp'] = df_soilingkit['timestamp'].dt.tz_convert('UTC')
         
-        # Reordenar columnas según el orden correcto de la base de datos: stamptime, Isc(p), Isc(e), Tp(C), Te(C)
-        column_order = ['stamptime', 'Isc(p)', 'Isc(e)', 'Tp(C)', 'Te(C)']
+        # Reordenar columnas según el orden correcto: timestamp, Isc(e), Isc(p), Te(C), Tp(C)
+        column_order = ['timestamp', 'Isc(e)', 'Isc(p)', 'Te(C)', 'Tp(C)']
         # Seleccionar solo las columnas en el orden correcto
         df_soilingkit = df_soilingkit[column_order]
         
         # Mostrar información sobre el rango de fechas en los datos
         logger.info(f"📅 Rango de fechas en los datos:")
-        logger.info(f"   Fecha más antigua: {df_soilingkit['stamptime'].min()}")
-        logger.info(f"   Fecha más reciente: {df_soilingkit['stamptime'].max()}")
-
+        logger.info(f"   Fecha más antigua: {df_soilingkit['timestamp'].min()}")
+        logger.info(f"   Fecha más reciente: {df_soilingkit['timestamp'].max()}")
+        
         # Verificar que hay datos en el rango especificado
         if len(df_soilingkit) == 0:
             logger.warning("⚠️  No se encontraron datos en el rango de fechas especificado.")
             return False
-
+        
         # Crear carpeta específica para Soiling Kit
         section_dir = os.path.join(output_dir, 'soiling_kit')
         os.makedirs(section_dir, exist_ok=True)
@@ -1345,10 +1320,10 @@ def download_soiling_kit_clickhouse(start_date, end_date, output_dir):
         output_filepath = os.path.join(section_dir, 'soiling_kit_raw_data.csv')
         logger.info(f"💾 Guardando datos en: {output_filepath}")
         df_soilingkit.to_csv(output_filepath, index=False)
-
+        
         logger.info(f"✅ Datos del Soiling Kit desde ClickHouse guardados exitosamente")
         logger.info(f"📊 Total de registros: {len(df_soilingkit)}")
-        logger.info(f"📅 Rango de fechas: {df_soilingkit['stamptime'].min()} a {df_soilingkit['stamptime'].max()}")
+        logger.info(f"📅 Rango de fechas: {df_soilingkit['timestamp'].min()} a {df_soilingkit['timestamp'].max()}")
 
         # Mostrar estadísticas básicas
         logger.info("📊 Estadísticas de los datos:")
@@ -1363,15 +1338,170 @@ def download_soiling_kit_clickhouse(start_date, end_date, output_dir):
         
         # Mostrar información sobre la estructura de datos
         logger.info("📋 Estructura de datos del Soiling Kit:")
-        logger.info(f"   - Isc(e): Corriente de cortocircuito de la celda limpia (referencia)")
-        logger.info(f"   - Isc(p): Corriente de cortocircuito de la celda sucia (panel)")
-        logger.info(f"   - Te(C): Temperatura de la celda limpia en Celsius")
-        logger.info(f"   - Tp(C): Temperatura de la celda sucia en Celsius")
+        logger.info(f"   - Isc(e): Corriente de cortocircuito de la celda expuesta/sucia")
+        logger.info(f"   - Isc(p): Corriente de cortocircuito de la celda protegida/limpia (referencia)")
+        logger.info(f"   - Te(C): Temperatura de la celda expuesta/sucia en Celsius")
+        logger.info(f"   - Tp(C): Temperatura de la celda protegida/limpia en Celsius")
         
         return True
         
     except Exception as e:
         logger.error(f"❌ Error en la descarga de datos del Soiling Kit desde ClickHouse: {e}")
+        import traceback
+        logger.error(f"Detalles del error:\n{traceback.format_exc()}")
+        return False
+    finally:
+        if client:
+            logger.info("Cerrando conexión a ClickHouse...")
+            client.close()
+            logger.info("✅ Conexión a ClickHouse cerrada")
+
+
+def download_soiling_kit_long_clickhouse(start_date, end_date, output_dir):
+    """
+    Descarga y procesa datos del Soiling Kit desde ClickHouse (formato largo).
+    
+    Esta función:
+    - Esquema: "PSDA"
+    - Tabla: "soilingkit" (sin guion bajo)
+    - Columnas: "Stamptime", "Attribute", "Measure" (formato largo)
+    - Convierte datos de formato largo a formato ancho (pivot)
+    
+    Args:
+        start_date (datetime): Fecha de inicio del rango (con timezone)
+        end_date (datetime): Fecha de fin del rango (con timezone)
+        output_dir (str): Directorio donde guardar los archivos
+        
+    Returns:
+        bool: True si la descarga fue exitosa, False en caso contrario
+    """
+    logger.info("🌪️  Iniciando descarga de datos del Soiling Kit (formato largo) desde ClickHouse...")
+    client = None
+    
+    try:
+        # Conectar a ClickHouse
+        logger.info("Conectando a ClickHouse...")
+        client = clickhouse_connect.get_client(
+            host=CLICKHOUSE_CONFIG['host'],
+            port=int(CLICKHOUSE_CONFIG['port']),
+            username=CLICKHOUSE_CONFIG['user'],
+            password=CLICKHOUSE_CONFIG['password']
+        )
+        logger.info("✅ Conexión a ClickHouse establecida")
+        
+        # Convertir fechas al formato correcto para ClickHouse (asegurar timezone UTC)
+        if isinstance(start_date, pd.Timestamp):
+            start_date_utc = pd.Timestamp(start_date)
+        else:
+            start_date_utc = pd.to_datetime(start_date)
+            
+        if isinstance(end_date, pd.Timestamp):
+            end_date_utc = pd.Timestamp(end_date)
+        else:
+            end_date_utc = pd.to_datetime(end_date)
+        
+        # Asegurar timezone UTC
+        if start_date_utc.tz is None:
+            start_date_utc = start_date_utc.tz_localize('UTC')
+        else:
+            start_date_utc = start_date_utc.tz_convert('UTC')
+            
+        if end_date_utc.tz is None:
+            end_date_utc = end_date_utc.tz_localize('UTC')
+        else:
+            end_date_utc = end_date_utc.tz_convert('UTC')
+        
+        start_str = start_date_utc.strftime("%Y-%m-%d %H:%M:%S")
+        end_str = end_date_utc.strftime("%Y-%m-%d %H:%M:%S")
+        
+        logger.info(f"📅 Consultando datos desde {start_str} hasta {end_str}")
+        
+        # Consultar datos del Soiling Kit desde PSDA.soilingkit (formato largo)
+        logger.info("Consultando datos del Soiling Kit (formato largo) desde ClickHouse...")
+        query = f"""
+        SELECT 
+            Stamptime,
+            Attribute,
+            Measure
+        FROM PSDA.soilingkit 
+        WHERE Stamptime >= '{start_str}' AND Stamptime <= '{end_str}'
+        ORDER BY Stamptime, Attribute
+        """
+        
+        logger.info("Ejecutando consulta ClickHouse...")
+        logger.info(f"Consulta: {query[:200]}...")
+        
+        result = client.query(query)
+        
+        if not result.result_set:
+            logger.warning("⚠️  No se encontraron datos del Soiling Kit (formato largo) en ClickHouse")
+            return False
+            
+        logger.info(f"📊 Datos obtenidos: {len(result.result_set)} registros")
+        
+        # Convertir a DataFrame
+        logger.info("Procesando datos...")
+        df_soilingkit = pd.DataFrame(result.result_set, columns=['Stamptime', 'Attribute', 'Measure'])
+        
+        # Convertir Stamptime a datetime y asegurar que esté en UTC
+        df_soilingkit['Stamptime'] = pd.to_datetime(df_soilingkit['Stamptime'])
+        if df_soilingkit['Stamptime'].dt.tz is None:
+            df_soilingkit['Stamptime'] = df_soilingkit['Stamptime'].dt.tz_localize('UTC')
+        else:
+            df_soilingkit['Stamptime'] = df_soilingkit['Stamptime'].dt.tz_convert('UTC')
+
+        # Mostrar atributos únicos encontrados
+        atributos_unicos = df_soilingkit['Attribute'].unique()
+        logger.info(f"📊 Atributos encontrados: {', '.join(atributos_unicos)}")
+        
+        # Pivotar los datos para convertir de long format a wide format
+        logger.info("Pivotando datos de long format a wide format...")
+
+        # Primero, manejar duplicados agregando por promedio
+        logger.info("Manejando duplicados agrupando por promedio...")
+        df_soilingkit_grouped = df_soilingkit.groupby(['Stamptime', 'Attribute'])['Measure'].mean().reset_index()
+
+        # Ahora hacer el pivot sin duplicados
+        df_soilingkit_pivot = df_soilingkit_grouped.pivot(index='Stamptime', columns='Attribute', values='Measure')
+
+        # Renombrar el índice
+        df_soilingkit_pivot.index.name = 'timestamp'
+        
+        # Mostrar información sobre el rango de fechas en los datos
+        logger.info(f"📅 Rango de fechas en los datos:")
+        logger.info(f"   Fecha más antigua: {df_soilingkit_pivot.index.min()}")
+        logger.info(f"   Fecha más reciente: {df_soilingkit_pivot.index.max()}")
+
+        # Verificar que hay datos en el rango especificado
+        if len(df_soilingkit_pivot) == 0:
+            logger.warning("⚠️  No se encontraron datos en el rango de fechas especificado.")
+            return False
+
+        # Crear carpeta específica para Soiling Kit (formato largo)
+        section_dir = os.path.join(output_dir, 'soilingkit')
+        os.makedirs(section_dir, exist_ok=True)
+        logger.info(f"📁 Carpeta de sección: {section_dir}")
+        
+        # Guardar datos
+        output_filepath = os.path.join(section_dir, 'soilingkit_raw_data.csv')
+        logger.info(f"💾 Guardando datos en: {output_filepath}")
+        df_soilingkit_pivot.to_csv(output_filepath)
+
+        logger.info(f"✅ Datos del Soiling Kit (formato largo) desde ClickHouse guardados exitosamente")
+        logger.info(f"📊 Total de registros: {len(df_soilingkit_pivot)}")
+        logger.info(f"📅 Rango de fechas: {df_soilingkit_pivot.index.min()} a {df_soilingkit_pivot.index.max()}")
+
+        # Mostrar estadísticas básicas por atributo
+        logger.info("📊 Estadísticas de los datos:")
+        for attr in df_soilingkit_pivot.columns:
+            if attr in df_soilingkit_pivot.columns:
+                logger.info(f"   {attr} - Rango: {df_soilingkit_pivot[attr].min():.3f} a {df_soilingkit_pivot[attr].max():.3f}")
+                logger.info(f"   {attr} - Promedio: {df_soilingkit_pivot[attr].mean():.3f}")
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Error en la descarga de datos del Soiling Kit (formato largo) desde ClickHouse: {e}")
         import traceback
         logger.error(f"Detalles del error:\n{traceback.format_exc()}")
         return False
@@ -2069,10 +2199,11 @@ def mostrar_menu():
     print("  4. PV Glasses")
     print("  5. DustIQ")
     print("  6. Soiling Kit")
-    print("  7. PVStand")
-    print("  8. PVStand Temperatura")
-    print("  9. Solys2 (Radiación solar)")
-    print(" 10. RefCells (Celdas de referencia)")
+    print("  7. Soiling Kit (formato largo - soilingkit)")
+    print("  8. PVStand")
+    print("  9. PVStand Temperatura")
+    print(" 10. Solys2 (Radiación solar)")
+    print(" 11. RefCells (Celdas de referencia)")
     print("  0. Salir")
     print("-"*60)
 
@@ -2137,21 +2268,26 @@ def ejecutar_descargas(start_date, end_date, opcion, fotoceldas_seleccionadas=No
         resultados['soiling_kit'] = download_soiling_kit_clickhouse(start_date, end_date, OUTPUT_DIR)
         
     elif opcion == '7':
+        # Soiling Kit (formato largo) desde ClickHouse
+        print("\n🌪️  Iniciando descarga del Soiling Kit (formato largo) desde ClickHouse...")
+        resultados['soiling_kit_long'] = download_soiling_kit_long_clickhouse(start_date, end_date, OUTPUT_DIR)
+        
+    elif opcion == '8':
         # PVStand desde ClickHouse
         print("\n🔋 Iniciando descarga de PVStand desde ClickHouse...")
         resultados['pvstand'] = download_pvstand_clickhouse(start_date, end_date, OUTPUT_DIR)
         
-    elif opcion == '8':
+    elif opcion == '9':
         # PVStand Temperatura desde ClickHouse
         print("\n🌡️  Iniciando descarga de temperatura PVStand desde ClickHouse...")
         resultados['pvstand_temp'] = download_pvstand_temperature_clickhouse(start_date, end_date, OUTPUT_DIR)
         
-    elif opcion == '9':
+    elif opcion == '10':
         # Solys2 desde ClickHouse
         print("\n☀️  Iniciando descarga de Solys2 desde ClickHouse...")
         resultados['solys2'] = download_solys2_clickhouse(start_date, end_date, OUTPUT_DIR)
         
-    elif opcion == '10':
+    elif opcion == '11':
         # RefCells desde ClickHouse
         print("\n🔋 Iniciando descarga de RefCells desde ClickHouse...")
         resultados['refcells'] = download_refcells_clickhouse(start_date, end_date, OUTPUT_DIR)
@@ -2187,6 +2323,10 @@ def ejecutar_descargas(start_date, end_date, opcion, fotoceldas_seleccionadas=No
     if 'soiling_kit' in resultados:
         estado = "✅ Exitoso" if resultados['soiling_kit'] else "❌ Fallido"
         print(f"  Soiling Kit: {estado}")
+    
+    if 'soiling_kit_long' in resultados:
+        estado = "✅ Exitoso" if resultados['soiling_kit_long'] else "❌ Fallido"
+        print(f"  Soiling Kit (formato largo): {estado}")
     
     if 'pvstand' in resultados:
         estado = "✅ Exitoso" if resultados['pvstand'] else "❌ Fallido"
@@ -2228,7 +2368,7 @@ if __name__ == "__main__":
             print("\n👋 ¡Hasta luego!")
             break
         
-        if opcion in ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']:
+        if opcion in ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11']:
             # Si la opción incluye PV Glasses, permitir seleccionar fotoceldas
             fotoceldas_seleccionadas = None
             if opcion in ['3', '4']:
@@ -2242,5 +2382,5 @@ if __name__ == "__main__":
                 print("\n👋 ¡Hasta luego!")
                 break
         else:
-            print("\n❌ Opción inválida. Por favor selecciona 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 o 10.")
+            print("\n❌ Opción inválida. Por favor selecciona 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 o 11.")
 

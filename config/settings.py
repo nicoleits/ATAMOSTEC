@@ -139,6 +139,7 @@ PVSTAND_TEMP_SENSOR_REFERENCE_COL = '1TE418(C)'
 # Columnas para incertidumbre (construidas dinámicamente basadas en los IDs de módulos)
 PVSTAND_ISC_COLUMN = f'{PVSTAND_MODULE_SOILED_ID}_Imax'
 PVSTAND_ISC_REF_COLUMN = f'{PVSTAND_MODULE_REFERENCE_ID}_Imax'
+PVSTAND_POUT_COLUMN = f'{PVSTAND_MODULE_SOILED_ID}_Pmax'  # Sobrescribe la definición anterior con el nombre correcto después del pivot
 PVSTAND_PMAX_REF_COLUMN = f'{PVSTAND_MODULE_REFERENCE_ID}_Pmax'
 PVSTAND_ALPHA_ISC_CORR = -0.0004 
 PVSTAND_BETA_PMAX_CORR = +0.0037 

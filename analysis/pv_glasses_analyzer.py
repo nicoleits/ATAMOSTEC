@@ -278,12 +278,17 @@ def analizar_transmitancia_pv_glasses(
     try:
         logger.info(f"Cargando datos desde {file_path}...")
         try:
-            lf = pl.scan_csv(file_path, separator=',', has_header=True, try_parse_dates=False)
+            # Usar método más simple similar al código Q25 que funciona correctamente
+            data_df = pl.read_csv(file_path, try_parse_dates=True)
         except Exception as e:
-            logger.error(f"Error inicial al escanear CSV {file_path}: {e}")
+            logger.error(f"Error al cargar CSV {file_path}: {e}")
             return None, None, None, None
 
-        original_headers = lf.columns
+        if data_df.is_empty():
+            logger.error(f"Error: DataFrame vacío después de cargar {file_path}")
+            return None, None, None, None
+
+        original_headers = data_df.columns
         if time_column not in original_headers:
             logger.error(f"Error: Columna de tiempo '{time_column}' no encontrada en {original_headers}.")
             return None, None, None, None
@@ -301,27 +306,22 @@ def analizar_transmitancia_pv_glasses(
             logger.warning(f"No se puede calcular la columna REF porque '{ref_col1_name}' o '{ref_col2_name}' no están en las columnas objetivo.")
         logger.info(f"Columnas numéricas objetivo identificadas: {initial_target_numeric_columns}")
 
-        data_df = lf.collect()
-
+        # Convertir columna de tiempo a datetime naive (enfoque simplificado como Q25)
         logger.info(f"Convirtiendo columna '{time_column}' a datetime naive...")
         try:
-            if data_df[time_column].dtype == pl.Object or data_df[time_column].dtype == pl.Utf8:
+            if time_column in data_df.columns:
+                # Método simple exactamente como el Q25: try_parse_dates=True ya parseó las fechas
+                # Solo necesitamos quitar el timezone si existe (si ya no tiene timezone, no hará nada)
                 try:
-                    data_df = data_df.with_columns(pl.col(time_column).str.to_datetime("%Y-%m-%d %H:%M:%S%.f%z", strict=False, time_zone="UTC").dt.replace_time_zone(None))
-                except pl.exceptions.ComputeError:
-                    try:
-                        data_df = data_df.with_columns(pl.col(time_column).str.to_datetime("%Y-%m-%d %H:%M:%S%.f", strict=False).dt.replace_time_zone(None))
-                    except pl.exceptions.ComputeError:
-                        data_df = data_df.with_columns(pl.col(time_column).str.to_datetime(strict=False).dt.replace_time_zone(None))
-            elif isinstance(data_df[time_column].dtype, pl.Datetime):
-                if data_df[time_column].dt.time_zone() is not None:
-                    data_df = data_df.with_columns(pl.col(time_column).dt.replace_time_zone(None))
-            else:
-                raise ValueError(f"Tipo de columna de tiempo no esperado: {data_df[time_column].dtype}")
-            data_df = data_df.with_columns(pl.col(time_column).cast(pl.Datetime).dt.cast_time_unit("us"))
-            logger.info(f"Columna '{time_column}' convertida exitosamente a Datetime naive.")
+                    data_df = data_df.with_columns(
+                        pl.col(time_column).dt.replace_time_zone(None).alias(time_column)
+                    )
+                except Exception:
+                    # Si falla, probablemente ya es naive, continuar
+                    pass
+                logger.info(f"Columna '{time_column}' convertida exitosamente a Datetime naive.")
         except Exception as e:
-            logger.error(f"Fallo crítico al convertir la columna '{time_column}' a Datetime naive: {e}")
+            logger.error(f"Fallo crítico al convertir la columna '{time_column}' a Datetime naive: {e}", exc_info=True)
             return None, None, None, None
 
         for col_c in initial_target_numeric_columns:
@@ -492,12 +492,31 @@ def analizar_transmitancia_pv_glasses(
             try:
                 cols_to_resample = [c for c in final_target_numeric_columns_for_stats if c in cleaned_final_df.columns]
                 if cols_to_resample:
-                    daily_resampled_final_df = cleaned_final_df.group_by_dynamic(
-                        index_column=time_column, every="1d", period="1d", offset="0h", closed='left'
-                    ).agg([pl.mean(c).alias(c) for c in cols_to_resample]).sort(time_column)
-                    logger.info(f"Remuestreo diario completo. Forma: {daily_resampled_final_df.shape if daily_resampled_final_df is not None else 'N/A'}")
+                    # Filtrar filas con valores nulos en la columna de tiempo antes del remuestreo
+                    cleaned_final_df_for_resample = cleaned_final_df.filter(pl.col(time_column).is_not_null())
+                    
+                    if cleaned_final_df_for_resample.is_empty():
+                        logger.warning("No hay datos válidos (sin nulos en tiempo) para remuestreo diario.")
+                    else:
+                        # Usar group_by con columna de fecha (método más robusto, similar a Q25)
+                        cleaned_final_df_with_date = cleaned_final_df_for_resample.with_columns(
+                            pl.col(time_column).dt.date().alias('fecha')
+                        )
+                        
+                        # Agregar expresiones de agregación: mantener tiempo y calcular promedio
+                        agg_expressions = [pl.col(time_column).first().alias(time_column)]
+                        for col in cols_to_resample:
+                            if col in cleaned_final_df_with_date.columns:
+                                agg_expressions.append(pl.mean(col).alias(col))
+                        
+                        daily_resampled_final_df = cleaned_final_df_with_date.group_by('fecha').agg(agg_expressions)
+                        
+                        # Ordenar por tiempo y eliminar columna auxiliar de fecha
+                        daily_resampled_final_df = daily_resampled_final_df.sort(time_column).drop('fecha')
+                        
+                        logger.info(f"Remuestreo diario completo. Forma: {daily_resampled_final_df.shape if daily_resampled_final_df is not None else 'N/A'}")
             except Exception as e:
-                logger.error(f"Error durante el remuestreo diario: {e}. Saltando remuestreo.")
+                logger.error(f"Error durante el remuestreo diario: {e}. Saltando remuestreo.", exc_info=True)
 
         base_col_order = ["column_name", "total_data_rows_processed", "rows_in_final_df", "valid_numbers", "nan_count", "negative_count", "q1", "q3", "iqr", "iqr_lower_bound", "iqr_upper_bound", "outlier_count", "outlier_percentage"]
 
@@ -517,12 +536,40 @@ def analizar_transmitancia_pv_glasses(
 
         if cleaned_final_df is not None and not cleaned_final_df.is_empty():
             clean_data_filename = os.path.join(output_csv_dir, SUBFOLDER_TRANSMITANCIA, f"{processing_id}_data_cleaned_final.csv")
-            cleaned_final_df.write_csv(clean_data_filename, datetime_format="%Y-%m-%dT%H:%M:%S")
+            # Asegurarse de que la columna de tiempo se guarde correctamente
+            cleaned_final_df_to_save = cleaned_final_df.clone()
+            
+            # Verificar estado de la columna de tiempo antes de guardar
+            if time_column not in cleaned_final_df_to_save.columns:
+                logger.error(f"ERROR CRÍTICO: La columna de tiempo '{time_column}' no existe en el DataFrame antes de guardar!")
+            else:
+                null_count = cleaned_final_df_to_save[time_column].null_count()
+                total_rows = len(cleaned_final_df_to_save)
+                logger.info(f"Estado de columna '{time_column}' antes de guardar: {null_count}/{total_rows} valores nulos")
+                
+                # Convertir datetime a string explícitamente para asegurar que se guarde
+                if isinstance(cleaned_final_df_to_save[time_column].dtype, pl.Datetime):
+                    logger.info(f"Convirtiendo columna '{time_column}' de Datetime a String para guardado...")
+                    cleaned_final_df_to_save = cleaned_final_df_to_save.with_columns(
+                        pl.col(time_column).dt.strftime("%Y-%m-%d %H:%M:%S").alias(time_column)
+                    )
+                elif cleaned_final_df_to_save[time_column].dtype == pl.Utf8 or cleaned_final_df_to_save[time_column].dtype == pl.Object:
+                    logger.info(f"Columna '{time_column}' ya es String, no necesita conversión")
+            
+            cleaned_final_df_to_save.write_csv(clean_data_filename)
             logger.info(f"Datos finales limpios (minuto a minuto) guardados en: {clean_data_filename}")
 
         if daily_resampled_final_df is not None and not daily_resampled_final_df.is_empty():
             daily_data_filename = os.path.join(output_csv_dir, SUBFOLDER_TRANSMITANCIA, f"{processing_id}_data_daily_resampled_final.csv")
-            daily_resampled_final_df.write_csv(daily_data_filename, datetime_format="%Y-%m-%d")
+            # Asegurarse de que la columna de tiempo se guarde correctamente
+            daily_resampled_to_save = daily_resampled_final_df.clone()
+            if time_column in daily_resampled_to_save.columns:
+                # Convertir datetime a string explícitamente para asegurar que se guarde
+                if isinstance(daily_resampled_to_save[time_column].dtype, pl.Datetime):
+                    daily_resampled_to_save = daily_resampled_to_save.with_columns(
+                        pl.col(time_column).dt.strftime("%Y-%m-%d").alias(time_column)
+                    )
+            daily_resampled_to_save.write_csv(daily_data_filename)
             logger.info(f"Datos diarios remuestreados guardados en: {daily_data_filename}")
 
         logger.info(f"--- Iniciando graficado general de transmitancia de PV Glasses ---")
@@ -695,6 +742,108 @@ def analizar_calendario_muestras(
         print(f"Error inesperado: {e}")
         return None, None 
 
+def cargar_datos_incertidumbre_por_periodo(periodo: str, fecha_fin_exposicion: pd.Timestamp = None) -> Optional[pd.DataFrame]:
+    """
+    Carga datos de incertidumbre según el período y la fecha de fin de exposición.
+    
+    Args:
+        periodo: Nombre del período (ej: 'semanal', 'Mensual', etc.)
+        fecha_fin_exposicion: Fecha de fin de exposición para este período
+    
+    Returns:
+        DataFrame con datos de incertidumbre o None si no se encuentra
+    """
+    try:
+        # Importar paths
+        import config.paths as paths
+        
+        # Mapear período a archivo de incertidumbre
+        periodo_lower = periodo.lower()
+        if 'semanal' in periodo_lower or periodo_lower == 'weekly':
+            uncertainty_file = paths.PV_GLASSES_SR_WEEKLY_ABS_WITH_U_FILE
+        elif 'mensual' in periodo_lower or periodo_lower == 'monthly':
+            uncertainty_file = paths.PV_GLASSES_SR_MONTHLY_ABS_WITH_U_FILE
+        elif 'diario' in periodo_lower or periodo_lower == 'daily':
+            uncertainty_file = paths.PV_GLASSES_SR_DAILY_ABS_WITH_U_FILE
+        else:
+            # Por defecto usar semanal
+            uncertainty_file = paths.PV_GLASSES_SR_WEEKLY_ABS_WITH_U_FILE
+        
+        if not os.path.exists(uncertainty_file):
+            logger.warning(f"Archivo de incertidumbre no encontrado: {uncertainty_file}")
+            return None
+        
+        # Cargar datos de incertidumbre
+        df_uncertainty = pd.read_csv(uncertainty_file, index_col='_time', parse_dates=True)
+        
+        # Si hay fecha de fin de exposición, filtrar datos cercanos a esa fecha
+        if fecha_fin_exposicion is not None:
+            # Buscar datos dentro de ±7 días de la fecha de fin
+            mask = abs(df_uncertainty.index - fecha_fin_exposicion) <= pd.Timedelta(days=7)
+            df_uncertainty_filtered = df_uncertainty[mask]
+            if not df_uncertainty_filtered.empty:
+                return df_uncertainty_filtered
+        
+        return df_uncertainty
+        
+    except Exception as e:
+        logger.warning(f"Error al cargar datos de incertidumbre para período {periodo}: {e}")
+        return None
+
+def calcular_barras_error_por_periodo(
+    promedios_periodo: Dict[str, Any],
+    correspondencia_sr_masa: Dict[str, str],
+    df_uncertainty: Optional[pd.DataFrame] = None
+) -> Dict[str, float]:
+    """
+    Calcula las barras de error para cada SR basándose en datos de incertidumbre.
+    
+    Args:
+        promedios_periodo: Diccionario con promedios por SR para un período
+        correspondencia_sr_masa: Mapeo de columnas SR a columnas de masa
+        df_uncertainty: DataFrame con datos de incertidumbre
+    
+    Returns:
+        Diccionario con barras de error para cada SR (en porcentaje absoluto)
+    """
+    barras_error = {}
+    
+    if df_uncertainty is None or df_uncertainty.empty:
+        return barras_error
+    
+    # Para cada SR, buscar su incertidumbre
+    for sr_col in correspondencia_sr_masa.keys():
+        promedio_col = f'Promedio_{sr_col}'
+        if promedio_col not in promedios_periodo:
+            continue
+        
+        promedio_sr = promedios_periodo[promedio_col]
+        if pd.isna(promedio_sr) or promedio_sr == 0:
+            continue
+        
+        # Buscar columna de incertidumbre relativa k=2
+        # Formato: U_SR_R_FC3_k2_rel, U_SR_R_FC4_k2_rel, U_SR_R_FC5_k2_rel
+        uncertainty_col = f'U_{sr_col}_k2_rel'
+        
+        if uncertainty_col not in df_uncertainty.columns:
+            continue
+        
+        # Calcular promedio de incertidumbre relativa para este período
+        u_rel_values = df_uncertainty[uncertainty_col].dropna()
+        if u_rel_values.empty:
+            continue
+        
+        # Promedio de incertidumbre relativa
+        u_rel_mean = u_rel_values.mean()
+        
+        # Convertir a incertidumbre absoluta
+        # u_rel está en formato adimensional (0.03 = 3%), multiplicar por el valor
+        u_abs = u_rel_mean * promedio_sr / 100.0  # Convertir porcentaje a decimal primero
+        
+        barras_error[promedio_col] = u_abs
+    
+    return barras_error
+
 def plot_soiling_ratios_por_periodo(
     df: pl.DataFrame,
     output_graph_dir: str,
@@ -702,6 +851,7 @@ def plot_soiling_ratios_por_periodo(
 ):
     """
     Genera gráficos de Soiling Ratios por periodo y un gráfico de barras de promedios.
+    Incluye propagación de errores (barras de error) si están disponibles los datos de incertidumbre.
     """
     if df is None or df.is_empty():
         logger.warning("DataFrame para graficar Soiling Ratios está vacío o no existe.")
@@ -743,6 +893,26 @@ def plot_soiling_ratios_por_periodo(
 
     # Lista para almacenar datos para el gráfico de barras
     datos_para_grafico_barras = []
+    
+    # Cargar datos de incertidumbre una vez al inicio
+    logger.info("Cargando datos de incertidumbre para propagación de errores...")
+    try:
+        import config.paths as paths
+        # Cargar datos de incertidumbre semanal (más común para períodos)
+        df_uncertainty_weekly = None
+        if os.path.exists(paths.PV_GLASSES_SR_WEEKLY_ABS_WITH_U_FILE):
+            df_uncertainty_weekly = pd.read_csv(paths.PV_GLASSES_SR_WEEKLY_ABS_WITH_U_FILE, index_col='_time', parse_dates=True)
+            logger.info(f"Datos de incertidumbre semanal cargados: {len(df_uncertainty_weekly)} registros")
+        
+        # Cargar datos de incertidumbre mensual también
+        df_uncertainty_monthly = None
+        if os.path.exists(paths.PV_GLASSES_SR_MONTHLY_ABS_WITH_U_FILE):
+            df_uncertainty_monthly = pd.read_csv(paths.PV_GLASSES_SR_MONTHLY_ABS_WITH_U_FILE, index_col='_time', parse_dates=True)
+            logger.info(f"Datos de incertidumbre mensual cargados: {len(df_uncertainty_monthly)} registros")
+    except Exception as e:
+        logger.warning(f"No se pudieron cargar los datos de incertidumbre: {e}. Los gráficos se generarán sin barras de error.")
+        df_uncertainty_weekly = None
+        df_uncertainty_monthly = None
 
     # Generar gráfico para cada periodo
     for periodo in periodos_unicos:
@@ -794,6 +964,37 @@ def plot_soiling_ratios_por_periodo(
             promedios_periodo['Promedio_General_SR'] = promedio_general
             logger.info(f"Promedio general de SR para periodo {periodo}: {promedio_general:.2f}% (ya corregido +7.5%, basado en {len(promedios_sr)} tipos de SR)")
 
+        # Calcular barras de error para este período usando datos de incertidumbre
+        if df_uncertainty_weekly is not None or df_uncertainty_monthly is not None:
+            # Seleccionar el DataFrame de incertidumbre apropiado según el período
+            periodo_lower = periodo.lower()
+            if 'mensual' in periodo_lower or 'trimestral' in periodo_lower or 'cuatrimestral' in periodo_lower or 'semestral' in periodo_lower or 'año' in periodo_lower:
+                df_uncertainty_periodo = df_uncertainty_monthly
+            else:
+                df_uncertainty_periodo = df_uncertainty_weekly
+            
+            # Obtener fechas de fin de exposición para este período
+            fechas_fin = df_periodo['Fecha_Fin_Exposicion_Referencia'].unique()
+            if len(fechas_fin) > 0:
+                # Calcular barras de error basándose en las fechas de fin de exposición
+                barras_error = calcular_barras_error_por_periodo(
+                    promedios_periodo, 
+                    correspondencia_sr_masa, 
+                    df_uncertainty_periodo
+                )
+                
+                # Agregar barras de error al diccionario de promedios
+                for error_col, error_val in barras_error.items():
+                    promedios_periodo[f'Error_{error_col}'] = error_val
+                
+                # Calcular incertidumbre promedio general (promedio de las incertidumbres individuales)
+                if barras_error:
+                    error_values = [val for val in barras_error.values() if pd.notna(val) and val > 0]
+                    if error_values:
+                        error_general = np.mean(error_values)
+                        promedios_periodo['Error_Promedio_General_SR'] = error_general
+                        logger.info(f"Incertidumbre promedio general para periodo {periodo}: {error_general:.3f}%")
+        
         datos_para_grafico_barras.append(promedios_periodo)
 
         ax.set_title(f"Soiling Ratios for Period: {periodo_traducido} (Filtered by Corresponding Masses > 0)")
@@ -853,6 +1054,8 @@ def plot_soiling_ratios_por_periodo(
                 if cols_promedio_para_plot:
                     try:
                         fig_bar, ax_bar = plt.subplots(figsize=(14, 8))
+                        
+                        # Graficar barras (sin barras de error - se muestran en tabla separada)
                         df_grafico_barras_plot[cols_promedio_para_plot].plot(kind='bar', ax=ax_bar, width=0.8)
 
                         ax_bar.set_title('Average Soiling Ratios by Exposure Period', fontsize=16)
@@ -891,7 +1094,7 @@ def plot_soiling_ratios_por_periodo(
                     try:
                         fig_general, ax_general = plt.subplots(figsize=(12, 6))
                         
-                        # Crear gráfico de barras solo con promedios generales
+                        # Crear gráfico de barras solo con promedios generales (sin barras de error - se muestran en tabla separada)
                         promedios_generales = df_grafico_barras_plot['Promedio_General_SR']
                         promedios_generales.plot(kind='bar', ax=ax_general, width=0.6, color='#2E8B57')
                         
@@ -926,6 +1129,65 @@ def plot_soiling_ratios_por_periodo(
                         logger.error(f"Error al generar el gráfico de promedios generales: {e}")
                     finally:
                         plt.close(fig_general)
+                
+                # Crear tabla con resultados de incertidumbre
+                try:
+                    logger.info("Generando tabla de incertidumbre...")
+                    tabla_incertidumbre = []
+                    
+                    for periodo in df_grafico_barras_plot.index:
+                        fila = {'Periodo': periodo}
+                        
+                        # Agregar promedios y errores para cada SR
+                        for sr_col in correspondencia_sr_masa.keys():
+                            promedio_col = f'Promedio_{sr_col}'
+                            error_col = f'Error_{promedio_col}'
+                            
+                            if promedio_col in df_grafico_barras_plot.columns:
+                                promedio = df_grafico_barras_plot.loc[periodo, promedio_col]
+                                fila[promedio_col] = promedio
+                                
+                                if error_col in df_grafico_barras_plot.columns:
+                                    error = df_grafico_barras_plot.loc[periodo, error_col]
+                                    fila[error_col] = error
+                                    # Calcular incertidumbre relativa en porcentaje
+                                    if pd.notna(promedio) and promedio > 0 and pd.notna(error):
+                                        incertidumbre_rel_pct = (error / promedio) * 100
+                                        fila[f'Incertidumbre_Rel_{sr_col}_%'] = incertidumbre_rel_pct
+                        
+                        # Agregar promedio general y su error
+                        if 'Promedio_General_SR' in df_grafico_barras_plot.columns:
+                            promedio_general = df_grafico_barras_plot.loc[periodo, 'Promedio_General_SR']
+                            fila['Promedio_General_SR'] = promedio_general
+                            
+                            if 'Error_Promedio_General_SR' in df_grafico_barras_plot.columns:
+                                error_general = df_grafico_barras_plot.loc[periodo, 'Error_Promedio_General_SR']
+                                fila['Error_Promedio_General_SR'] = error_general
+                                # Calcular incertidumbre relativa en porcentaje
+                                if pd.notna(promedio_general) and promedio_general > 0 and pd.notna(error_general):
+                                    incertidumbre_rel_pct = (error_general / promedio_general) * 100
+                                    fila['Incertidumbre_Rel_General_%'] = incertidumbre_rel_pct
+                        
+                        tabla_incertidumbre.append(fila)
+                    
+                    # Crear DataFrame de la tabla
+                    df_tabla_incertidumbre = pd.DataFrame(tabla_incertidumbre)
+                    
+                    # Guardar tabla en CSV
+                    tabla_csv_path = os.path.join(output_graph_dir, subfolder, "tabla_incertidumbre_promedios.csv")
+                    df_tabla_incertidumbre.to_csv(tabla_csv_path, index=False)
+                    logger.info(f"Tabla de incertidumbre guardada en: {tabla_csv_path}")
+                    
+                    # También guardar en Excel para mejor formato
+                    try:
+                        tabla_excel_path = os.path.join(output_graph_dir, subfolder, "tabla_incertidumbre_promedios.xlsx")
+                        df_tabla_incertidumbre.to_excel(tabla_excel_path, index=False, engine='openpyxl')
+                        logger.info(f"Tabla de incertidumbre guardada en Excel: {tabla_excel_path}")
+                    except Exception as e:
+                        logger.warning(f"No se pudo guardar tabla en Excel (puede requerir openpyxl): {e}")
+                    
+                except Exception as e:
+                    logger.error(f"Error al generar tabla de incertidumbre: {e}", exc_info=True)
 
 def analizar_seleccion_irradiancia_post_exposicion(
     path_irradiancia_csv: str,
@@ -1134,7 +1396,7 @@ def run_analysis():
 
     # Definir rutas de archivos
     transmitancia_file = os.path.join(data_dir, 'raw_pv_glasses_data.csv')
-    calendario_file = os.path.join(data_dir, '20241114 Calendario toma de muestras soiling.xlsx')
+    calendario_file = os.path.join(data_dir, 'calendario', '20241114 Calendario toma de muestras soiling.xlsx')
 
     # Verificar existencia de archivos
     if not os.path.exists(transmitancia_file):
@@ -1193,8 +1455,10 @@ def run_analysis():
         logger.info("Iniciando análisis de propagación de incertidumbre de SR (PV Glasses)...")
         try:
             from analysis.sr_uncertainty_pv_glasses import run_uncertainty_propagation_analysis_pv_glasses
-            # Usar el archivo de irradiancia seleccionada (antes de calcular SR) como entrada
-            path_irradiancia_input = os.path.join(output_csv_dir, "seleccion_irradiancia_post_exposicion.csv")
+            import config.paths as paths
+            # Usar el archivo RAW de PV Glasses (datos minuto a minuto) como entrada
+            # El módulo necesita datos minuto a minuto con columnas R_FC1_Avg, R_FC2_Avg, R_FC3_Avg, R_FC4_Avg, R_FC5_Avg
+            path_irradiancia_input = paths.PV_GLASSES_RAW_DATA_FILE
             if os.path.exists(path_irradiancia_input):
                 uncertainty_success = run_uncertainty_propagation_analysis_pv_glasses(
                     input_file=path_irradiancia_input,
@@ -1205,7 +1469,7 @@ def run_analysis():
                 else:
                     logger.warning("⚠️  El análisis de propagación de incertidumbre no se completó exitosamente.")
             else:
-                logger.warning(f"Archivo de irradiancia no encontrado para propagación de errores: {path_irradiancia_input}")
+                logger.warning(f"Archivo RAW de PV Glasses no encontrado para propagación de errores: {path_irradiancia_input}")
         except ImportError as e:
             logger.error(f"No se pudo importar el módulo 'sr_uncertainty_pv_glasses': {e}")
         except Exception as e:
